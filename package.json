@@ -1,0 +1,21 @@
+{
+   "name": "astack",
+   "version": "1.0.0",
+   "description": "Tool for writing sequences of asynchronous functions.",
+   "main": "astack.js",
+   "author": "Federico Pereiro <fpereiro@gmail.com>",
+   "contributors": ["Federico Pereiro <fpereiro@gmail.com>"],
+   "license": [{
+      "type": "Public Domain",
+      "url": "http://github.com/fpereiro/astack#license"
+   }],
+   "keywords": ["functional", "async", "asynchronous", "flow control"],
+   "repository" : {
+      "type": "git",
+      "url": "http://github.com/fpereiro/astack.git"
+   },
+   "bugs": {
+      "url": "http://github.com/fpereiro/astack/issues",
+      "email": "fpereiro@gmail.com"
+   }
+}

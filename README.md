@@ -110,24 +110,24 @@ The two main functions of aStack are `aCall` and `aReturn`. If you understand wh
 
 `aCall` takes two arguments: an `aStack` and an `aPath`/`aStep`. It does the following:
 
-1) Creates the `aStack` if it is undefined. Default value for an `aStack` is `{aPath = []}`.
-2) If the `aPath/aStep` turns out to be an `aStep`, it is wrapped in an array to become an `aPath`.
-3) Validates the `aStack` and the `aPath`. If they don't pass the test, the function returns false.
-4) `aStack.aPath = aPath.concat (aStack.aPath);`: the `aPath` of the stack is now the `aPath` received, plus what the `aPath` of the stack had before.
-5) If `aStack.aPath`'s length is 0, there's nothing else to do. Return true.
-6) We shift the first element from the `aStack.aPath` and name it `aStep`.
-7) We validate this `aStep`. This step is redundant in the case that 2) was executed. If the validation returns false, the function returns false.
-8) We shift the first element from the `aStep` and name it `aFunction`.
-9) We place the `aStack` as the first element of the `aStep`. After this, the `aStep` contains the `aStack` as first element, plus all the other elements (arguments) it had in the first place.
-10) We apply the `aFunction` with the `aStep` as its array of arguments. Notice that the `aStack` is the first argument passed to the `aFunction`! That's why we did 9) above.
+1. Creates the `aStack` if it is undefined. Default value for an `aStack` is `{aPath = []}`.
+2. If the `aPath/aStep` turns out to be an `aStep`, it is wrapped in an array to become an `aPath`.
+3. Validates the `aStack` and the `aPath`. If they don't pass the test, the function returns false.
+4. `aStack.aPath = aPath.concat (aStack.aPath);`: the `aPath` of the stack is now the `aPath` received, plus what the `aPath` of the stack had before.
+5. If `aStack.aPath`'s length is 0, there's nothing else to do. Return true.
+6. We shift the first element from the `aStack.aPath` and name it `aStep`.
+7. We validate this `aStep`. This step is redundant in the case that 2) was executed. If the validation returns false, the function returns false.
+8. We shift the first element from the `aStep` and name it `aFunction`.
+9. We place the `aStack` as the first element of the `aStep`. After this, the `aStep` contains the `aStack` as first element, plus all the other elements (arguments) it had in the first place.
+10. We apply the `aFunction` with the `aStep` as its array of arguments. Notice that the `aStack` is the first argument passed to the `aFunction`! That's why we did 9) above.
 
 To sum up, `aCall` takes two `aPath`s (one passed directly, the other one within the `aStack`), merges them, and executes the first `aFunction` in them, passing the `aStack`.
 
 `aReturn` also takes two arguments: a return value and an aStack. It does the following:
 
-1) Validate the aStack.
-2) Set `aStack.last` to the `last` argument.
-3) Call `aCall` with the `aStack` and an empty `aPath`.
+1. Validate the aStack.
+2. Set `aStack.last` to the `last` argument.
+3. Call `aCall` with the `aStack` and an empty `aPath`.
 
 As you can see, `aReturn` is far simpler than `aCall`.
 

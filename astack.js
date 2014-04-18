@@ -1,5 +1,5 @@
 /*
-aStack - v1.0.0
+aStack - v1.0.1
 
 Written by Federico Pereiro (fpereiro@gmail.com) and released into the public domain.
 
@@ -113,10 +113,7 @@ Please refer to README.md to see what this is about.
 
    a.validate.aMap = function (aMap) {
       if (type (aMap) !== 'object') {
-         return (e ('Argument of cond must be an object but instead is', aMap));
-      }
-      if (a.validate.aPath (aMap.cond) === false) {
-         return false;
+         return (e ('aMap must be an object but instead is', aMap));
       }
       return true;
    }
@@ -143,11 +140,17 @@ Please refer to README.md to see what this is about.
       a.aCall (aStack, aPath);
    }
 
-   a.aCond = function (aStack, aMap) {
-      if (a.validate.aMap (aMap) === false) {
-         return false;
-      }
-      a.aCall (aStack, aMap.cond.push ([aPick, aMap]));
+   a.aCond = function (aStack, aCond, aMap) {
+
+      if (a.validate.aPath (aCond) === false) return false;
+
+      if (a.validate.aMap (aMap) === false) return false;
+
+      if (type (aCond [0]) === 'function') aCond = [aCond];
+
+      aCond.push ([aPick, aMap]);
+
+      a.aCall (aStack, aCond);
    }
 
    a.aFork = function (aStack, aPath) {

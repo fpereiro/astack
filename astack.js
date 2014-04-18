@@ -1,5 +1,5 @@
 /*
-aStack - v1.0.1
+aStack - v1.0.2
 
 Written by Federico Pereiro (fpereiro@gmail.com) and released into the public domain.
 
@@ -165,6 +165,13 @@ Please refer to README.md to see what this is about.
             a.aReturn (original_aStack, results);
          }
       }
+
+      // If aPath is empty, we aReturn an empty path, otherwise, the function would not aReturn anything.
+      if (aPath.length === 0) {
+         a.aReturn (aStack, []);
+         return;
+      }
+
       for (var k in aPath) {
          if (a.validate.aStep (aPath [k]) === false) return false;
       }

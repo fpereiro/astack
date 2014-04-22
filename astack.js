@@ -88,7 +88,7 @@ Please refer to README.md to see what this is about.
       return true;
    }
 
-   // *** THE TWO MAIN FUNCTIONS ***
+   // *** SEQUENTIAL EXECUTION ***
 
    a.aCall = function (aStack, aPath) {
 
@@ -128,7 +128,7 @@ Please refer to README.md to see what this is about.
       a.aCall (aStack, []);
    }
 
-   // *** CONDITIONALS ***
+   // *** CONDITIONAL EXECUTION ***
 
    a.aPick = function (aStack, aMap) {
 

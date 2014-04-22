@@ -120,7 +120,7 @@ Current value of count_2.txt is 1
 aFork operation ready. Result was [ true, true, true ]
 ```
 
-## Why aStack?
+## Why `aStack?`
 
 Asynchronous functions are amazingly useful in Javascript, because they allow you to perform many slow operations (that involve the disk and the network) within a single process. Hence, your browser/server doesn't get stuck while waiting for data.
 
@@ -231,7 +231,7 @@ To sum up, `aCall` takes two `aPath`s (one passed directly, the other one within
 
 As you can see, `aReturn` is far simpler than `aCall`.
 
-## Understanding the conventions
+## Understanding the conventions on `aFunctions`
 
 By now, it should be clear why we have conventions/restrictions on aFunctions:
 
@@ -241,7 +241,7 @@ By now, it should be clear why we have conventions/restrictions on aFunctions:
 
 Notice that nothing prevents an `aFunction` from being synchronous! As long as you respect the conventions, the code will work.
 
-## aCond
+## `aCond`
 
 Apart from the `aStack`, `aCond` takes two additional arguments, an `aPath` (or `aStep`), and an `aMap`.
 
@@ -255,15 +255,15 @@ You can also insert a `default` key in the `aMap`. This key will be executed if 
 
 If neither `X` nor `default` are defined, `aCond` returns an error.
 
-## aFork
+## `aFork`
 
 Apart from the `aStack`, `aFork` takes one additional argument: an `aPath`.
 
-`aFork` passes each element within the `aPath` to `aCall` simultaneously. Notice that each of these elements can be an `aPath` itself; this can be seen in the parallel execution example above.
+`aFork` passes each element within the `aPath` to `aCall` simultaneously.
 
-When each of the `aPath`s (or `aStep`s) are finished, their results are stored in an array held by `aFork`. The results array has a one-to-one correspondence with the `aPath` passed to `aFork`, in that the first result matches the first `aStep`.
+When each of the `aSteps` are finished, their results are stored in an array held by `aFork`. The results array has a one-to-one correspondence with the `aPath` passed to `aFork`, in that the first result matches the first `aStep`, the second result matches the second `aStep`, and so on.
 
-When the last action is executed, the results array is `aReturn`ed.
+When the last action is executed, the results array is `aReturned`.
 
 If you pass an empty `aPath`, `aFork` will just return an empty array.
 

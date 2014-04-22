@@ -4,9 +4,9 @@ aStack is a tool for writing sequences of asynchronous functions in Javascript.
 
 aStack strives to be the simplest solution to the problem of executing arbitrary sequences of asynchronous functions.
 
-aStack works by making functions pass an `aStack` between them, instead of callbacks.
+aStack works by making functions pass an `aStack` between them as its first argument, instead of callbacks as their last one.
 
-aStack also supports conditional branching (through `aCond`) and parallelization of asynchronous tasks (through `aFork`).
+aStack also supports conditional execution (through `aCond`) and parallel execution (through `aFork`).
 
 ## Installation
 
@@ -16,6 +16,109 @@ aStack is written in Javascript. You can use it in the browser by sourcing the m
 <script src="astack.js"></script>
 ```
 And you also can use it in node.js. To install: `npm install astack`
+
+## Usage examples
+
+### Sequential execution
+
+Write "0" to a file, then read that value, increment it by 1 three times. Everything is executed in order without using synchronous functions.
+
+```javascript
+
+var fs = require ('fs');
+var a = require ('./astack.js');
+
+function write_file (aStack, path, data) {
+   if (typeof (path) !== 'string') {
+      a.aReturn (aStack, false);
+   }
+   else {
+      fs.writeFile (path, data, {encoding: 'utf8'}, function () {
+         console.log ('Current value of', path, 'is', data);
+         a.aReturn (aStack, true);
+      });
+   }
+}
+
+function increment_file (aStack, path) {
+   fs.readFile (path, function (error, data) {
+      write_file (aStack, path, parseInt (data) + 1);
+   });
+}
+
+a.aCall (undefined, [
+   [write_file, 'count.txt', '0'],
+   [increment_file, 'count.txt'],
+   [increment_file, 'count.txt'],
+   [increment_file, 'count.txt']
+]);
+```
+
+This script prints the following:
+
+```
+Current value of count.txt is 0
+Current value of count.txt is 1
+Current value of count.txt is 2
+Current value of count.txt is 3
+```
+
+### Conditional execution
+
+Try writing '0' to the specified path. If the action was successful, increment that file, otherwise print an error message.
+
+```javascript
+function write_and_increment (aStack, path) {
+   a.aCond (aStack, [write_file, path, '0'], {
+      true: [increment_file, path],
+      false: [function (aStack) {
+         console.log ('There was an error when writing to the file', path, 'so no incrementing will take place.');
+      }]
+   });
+}
+
+a.aCall (undefined, [
+   [write_and_increment, 'count.txt'],
+   [write_and_increment]
+]);
+```
+
+This script prints the following:
+
+```
+Current value of count.txt is 0
+Current value of count.txt is 1
+There was an error when writing to the file undefined so no incrementing will take place.
+```
+
+### Parallel execution
+
+Try writing '0' and then incrementing, for three different files at the same time. When all actions are completed, print the results of each action.
+
+```javascript
+a.aCall (undefined, [
+   [a.aFork, [
+      [write_and_increment, 'count_0.txt'],
+      [write_and_increment, 'count_1.txt'],
+      [write_and_increment, 'count_2.txt']
+   ]],
+   [function (aStack) {
+      console.log ('aFork operation ready. Result was', aStack.last);
+   }]
+]);
+```
+
+This script prints the following:
+
+```
+Current value of count_0.txt is 0
+Current value of count_1.txt is 0
+Current value of count_2.txt is 0
+Current value of count_1.txt is 1
+Current value of count_0.txt is 1
+Current value of count_2.txt is 1
+aFork operation ready. Result was [ true, true, true ]
+```
 
 ## Why aStack?
 
@@ -89,20 +192,17 @@ A detail I haven't mentioned yet: the first element of an `aStep` must always be
 The `aFunction` is a normal function (usually asynchronous, but not necessarily) that adheres to the following conventions:
 
 1. Receives an `aStack` as its first element.
-2. Whatever its execution path, as the last thing it does, the function calls either `aCall` or `aReturn` exactly once, passing the aStack to either of them.
-3. aCall or aReturn are called exactly once (at the end of each execution path) and not before.
+2. Whatever its execution path, as the last thing it does, the function calls either `aCall`, `aReturn` or some other `aFunction` exactly once, passing the aStack to either of them.
+3. The callback function is called exactly once (at the end of each execution path) and not before.
 
-`aCall` and `aReturn` are two functions; I'll get to them in a minute. For now, you just need to understand that these conventions are exactly the same than those of Javascript callbacks, with the following differences:
-
-1. You pass the `aStack` as the first argument, instead of the callback as the last argument.
-2. You invoke the next function in the sequence indirectly through `aCall` and `aReturn`, instead of just invoking the callback.
+`aCall` and `aReturn` are two functions; I'll get to them in a minute. For now, you just need to understand that these conventions are exactly the same than those of Javascript callbacks, except that you pass the `aStack` as the first argument, instead of the callback as the last one.
 
 To sum up, the elements of aStack are:
 
 1. `aStep`: an array that contains as first element an `aFunction`.
 2. `aPath`: an array of zero or more `aStep`s.
 3. `aStack`: an object containing an `aPath` and `last`.
-4. `aFunction`: a function that ends up with a call to `aCall` or `aReturn`.
+4. `aFunction`: a function that ends up with a call to `aCall` or `aReturn` (or to another `aFunction`).
 
 ## `aCall` and `aReturn`
 
@@ -143,17 +243,31 @@ Notice that nothing prevents an `aFunction` from being synchronous! As long as y
 
 ## aCond
 
-Imagine that you want your sequence to stop if any `aFunction` `aReturn`s `false` (or any other value, for that matter). It turns out this is very easy to use with aCond.
+Apart from the `aStack`, `aCond` takes two additional arguments, an `aPath` (or `aStep`), and an `aMap`.
 
-DOCUMENTATION COMING SOON!!
+An `aMap` is an object where each key points to an `aPath` (or `aStep`).
+
+`aCond` executes the `aPath`, obtains a result (we will call it `X`) and then executes the `aPath` contained at `aMap.X`.
+
+Notice that `X` will be stringified, since object keys are always strings in javascript. For an example of this, refer to the conditional execution example above.
+
+You can also insert a `default` key in the `aMap`. This key will be executed if `X` is not found in the `aMap`.
+
+If neither `X` nor `default` are defined, `aCond` returns an error.
 
 ## aFork
 
-DOCUMENTATION COMING SOON!!
+Apart from the `aStack`, `aFork` takes one additional argument: an `aPath`.
+
+`aFork` passes each element within the `aPath` to `aCall` simultaneously. Notice that each of these elements can be an `aPath` itself; this can be seen in the parallel execution example above.
+
+When each of the `aPath`s (or `aStep`s) are finished, their results are stored in an array held by `aFork`. The results array has a one-to-one correspondence with the `aPath` passed to `aFork`, in that the first result matches the first `aStep`.
+
+When the last action is executed, the results array is `aReturn`ed.
 
 ## Source code
 
-The complete source code is contained in `astack.js`. It is about 180 lines long.
+The complete source code is contained in `astack.js`. It is about 200 lines long.
 
 ## License
 

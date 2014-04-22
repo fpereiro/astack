@@ -1,5 +1,5 @@
 /*
-aStack - v1.0.2
+aStack - v1.0.3
 
 Written by Federico Pereiro (fpereiro@gmail.com) and released into the public domain.
 
@@ -8,20 +8,27 @@ Please refer to README.md to see what this is about.
 
 (function () {
 
-   var log = console.log;
+   // *** SETUP ***
+
+   // Useful shorthand.
+   if (typeof exports !== 'undefined') {
+      var log = console.log;
+   }
+   else {
+      window.log = function () {
+         if (console) console.log (arguments);
+         else alert (arguments);
+      }
+   }
 
    // This code allows us to export the lith in the browser and in the server.
    // Taken from http://backbonejs.org/docs/backbone.html
    var root = this;
    var a;
-   if (typeof exports !== 'undefined') {
-      a = exports;
-   }
-   else {
-      a = root.dale = {};
-   }
+   if (typeof exports !== 'undefined') a = exports;
+   else                                a = root.a = {};
 
-   // Taken from http://javascript.crockford.com/remedial.html and modified to add detection of regexes.
+   // The function below is from the teishi library (github.com/fpereiro/teishi). I added it manually because it wasn't worth it to add a dependence.
    function type (value) {
       var type = typeof value;
       if (type === 'object') {
@@ -39,11 +46,12 @@ Please refer to README.md to see what this is about.
       return type;
    }
 
-   // Error reporting function.
    function e () {
-      if (console) console.log (arguments);
+      log (arguments);
       return false;
    }
+
+   // *** VALIDATION ***
 
    a.validate = {};
 
@@ -72,6 +80,15 @@ Please refer to README.md to see what this is about.
       }
       return true;
    }
+
+   a.validate.aMap = function (aMap) {
+      if (type (aMap) !== 'object') {
+         return (e ('aMap must be an object but instead is', aMap));
+      }
+      return true;
+   }
+
+   // *** THE TWO MAIN FUNCTIONS ***
 
    a.aCall = function (aStack, aPath) {
 
@@ -111,12 +128,7 @@ Please refer to README.md to see what this is about.
       a.aCall (aStack, []);
    }
 
-   a.validate.aMap = function (aMap) {
-      if (type (aMap) !== 'object') {
-         return (e ('aMap must be an object but instead is', aMap));
-      }
-      return true;
-   }
+   // *** CONDITIONALS ***
 
    a.aPick = function (aStack, aMap) {
 
@@ -148,16 +160,22 @@ Please refer to README.md to see what this is about.
 
       if (type (aCond [0]) === 'function') aCond = [aCond];
 
-      aCond.push ([aPick, aMap]);
+      aCond.push ([a.aPick, aMap]);
 
       a.aCall (aStack, aCond);
    }
 
+   // *** PARALLEL EXECUTION ***
+
    a.aFork = function (aStack, aPath) {
+
       if (a.validate.aPath (aPath) === false) return false;
+
       var original_aStack = aStack;
       var paths = aPath.length;
       var results = [];
+
+      // Collect is the callback function invoked by each aStep within the aPath passed to the function.
       function collect (aStack, index) {
          results [index] = aStack.last;
          paths--;

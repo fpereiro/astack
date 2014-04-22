@@ -4,7 +4,7 @@ aStack is a tool for writing sequences of asynchronous functions in Javascript.
 
 aStack strives to be the simplest solution to the problem of executing arbitrary sequences of asynchronous functions.
 
-aStack works by making functions pass an `aStack` between them as its first argument, instead of callbacks as their last one.
+aStack works by making functions pass an `aStack` between them as their first argument, instead of a callback as their last one.
 
 aStack also supports conditional execution (through `aCond`) and parallel execution (through `aFork`).
 
@@ -249,7 +249,7 @@ An `aMap` is an object where each key points to an `aPath` (or `aStep`).
 
 `aCond` executes the `aPath`, obtains a result (we will call it `X`) and then executes the `aPath` contained at `aMap.X`.
 
-Notice that `X` will be stringified, since object keys are always strings in javascript. For an example of this, refer to the conditional execution example above.
+Notice that `X` will be stringified, since object keys are always strings in javascript. For an example of this, refer to the conditional execution example above, where `true` and `false` are converted into `'true'` and `'false'`.
 
 You can also insert a `default` key in the `aMap`. This key will be executed if `X` is not found in the `aMap`.
 

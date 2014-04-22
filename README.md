@@ -265,6 +265,8 @@ When each of the `aPath`s (or `aStep`s) are finished, their results are stored i
 
 When the last action is executed, the results array is `aReturn`ed.
 
+If you pass an empty `aPath`, `aFork` will just return an empty array.
+
 ## Source code
 
 The complete source code is contained in `astack.js`. It is about 200 lines long.

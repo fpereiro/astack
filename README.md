@@ -267,6 +267,12 @@ When the last action is executed, the results array is `aReturned`.
 
 If you pass an empty `aPath`, `aFork` will just return an empty array.
 
+## `log`
+
+To inspect the contents of `aStack.last`, place an `aStep` calling `log` just below the `aStep` you wish to inspect.
+
+`log` prints the contents of aStack.last, plus further arguments passed to it. It then `aReturns` aStack.last, so execution resumes unaffected.
+
 ## Source code
 
 The complete source code is contained in `astack.js`. It is about 200 lines long.

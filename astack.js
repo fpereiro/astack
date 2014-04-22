@@ -1,5 +1,5 @@
 /*
-aStack - v1.0.6
+aStack - v1.0.7
 
 Written by Federico Pereiro (fpereiro@gmail.com) and released into the public domain.
 
@@ -200,6 +200,16 @@ Please refer to README.md to see what this is about.
             [collect, k]
          ]);
       }
+   }
+
+   a.log = function (aStack) {
+      var Arguments = [];
+      for (var iterator in arguments) {
+         if (iterator === '0') Arguments.push (arguments [iterator].last);
+         else Arguments.push (arguments [iterator]);
+      }
+      log.apply (a.log, Arguments);
+      a.aReturn (aStack, aStack.last);
    }
 
 }).call (this);

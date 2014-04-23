@@ -1,5 +1,5 @@
 /*
-aStack - v1.1.0
+aStack - v1.1.1
 
 Written by Federico Pereiro (fpereiro@gmail.com) and released into the public domain.
 
@@ -215,7 +215,7 @@ Please refer to README.md to see what this is about.
       if (a.validate.aPath (aPath) === false) return false;
       stop_value = stop_value + '';
 
-      if (aPath.length === 0) return true;
+      if (aPath.length === 0) return a.aReturn (aStack, true);
 
       var next = aPath.shift ();
       a.aCond (aStack, next, {

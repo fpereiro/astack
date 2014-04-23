@@ -229,6 +229,8 @@ To sum up, `aCall` takes two `aPath`s (one passed directly, the other one within
 2. Set `aStack.last` to the `last` argument.
 3. Call `aCall` with the `aStack` and an empty `aPath`.
 
+Actually, `aReturn` can take an optional third argument, named `copy`, which is a string. A copy of the return value will be stored in the aStack, under the key named as the `copy` argument. This functionality is useful when you want to preserve an `aReturned` value for more than one `aStep`. Since every `aStep` overwrites aStack.last, when you need to preserve states along a chain of `aSteps`, just recur to this argument. Caution must be taken not to overuse this resource.
+
 As you can see, `aReturn` is far simpler than `aCall`.
 
 ## Understanding the conventions on `aFunctions`
@@ -267,15 +269,23 @@ When the last action is executed, the results array is `aReturned`.
 
 If you pass an empty `aPath`, `aFork` will just return an empty array.
 
-## `log`
+## Two useful functions
 
-To inspect the contents of `aStack.last`, place an `aStep` calling `log` just below the `aStep` you wish to inspect.
+### `aStop`
 
-`log` prints the contents of aStack.last, plus further arguments passed to it. It then `aReturns` aStack.last, so execution resumes unaffected.
+Apart from the `aStack`, `aStop` takes two more arguments: `stop_value` and an `aPath`.
+
+The `stop_value` is any value, which is coerced onto a string. `aStop` starts executing the first `aStep` in the `aPath`, and then, if the value `aReturned` by it is equal to the `stop_value`, that value is `aReturned` and no further `aSteps` are executed. If it's not equal, then `aStop` will execute the next `aStep`.
+
+### `log`
+
+To inspect the contents of the `aStack`, place an `aStep` calling `log` just below the `aStep` you wish to inspect.
+
+`log` prints the contents of the aStack, removing first `aStack.aPath`, and then adding further arguments passed to it. It then `aReturns` aStack.last, so execution resumes unaffected.
 
 ## Source code
 
-The complete source code is contained in `astack.js`. It is about 200 lines long.
+The complete source code is contained in `astack.js`. It is about 240 lines long.
 
 ## License
 

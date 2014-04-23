@@ -1,5 +1,5 @@
 /*
-aStack - v1.0.7
+aStack - v1.1.0
 
 Written by Federico Pereiro (fpereiro@gmail.com) and released into the public domain.
 
@@ -119,10 +119,16 @@ Please refer to README.md to see what this is about.
       aFunction.apply (aFunction, aStep);
    }
 
-   a.aReturn = function (aStack, last) {
+   a.aReturn = function (aStack, last, copy) {
       if (a.validate.aStack (aStack) === false) {
          return false;
       }
+
+      if (copy !== undefined && type (copy) !== 'string') {
+         return e ('copy parameter passed to aReturn must be string or undefined');
+      }
+
+      if (copy !== undefined) aStack [copy] = last;
 
       aStack.last = last;
       a.aCall (aStack, []);
@@ -202,12 +208,28 @@ Please refer to README.md to see what this is about.
       }
    }
 
+   // *** TWO USEFUL FUNCTIONS ***
+
+   a.aStop = function (aStack, stop_value, aPath) {
+
+      if (a.validate.aPath (aPath) === false) return false;
+      stop_value = stop_value + '';
+
+      if (aPath.length === 0) return true;
+
+      var next = aPath.shift ();
+      a.aCond (aStack, next, {
+         stop_on: [a.aReturn, stop_value],
+         default: [a.aStop, stop_value, aPath]
+      });
+   }
+
    a.log = function (aStack) {
       var Arguments = [];
       for (var iterator in arguments) {
-         if (iterator === '0') Arguments.push (arguments [iterator].last);
-         else Arguments.push (arguments [iterator]);
+         Arguments.push (arguments [iterator]);
       }
+      delete Arguments [0].aPath;
       log.apply (a.log, Arguments);
       a.aReturn (aStack, aStack.last);
    }

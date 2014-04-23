@@ -23,7 +23,7 @@ function increment_file (aStack, path) {
    });
 }
 
-// Uncomment example below. Be sure to leave commented the other two execution blocks below, otherwise they will try to execute at the same time!.
+// Uncomment example below. Be sure to leave commented the other three execution blocks, otherwise they will try to execute at the same time!.
 
 /*
 a.aCall (undefined, [
@@ -45,7 +45,7 @@ function write_and_increment (aStack, path) {
    });
 }
 
-// Uncomment example below. Be sure to leave commented the other two execution blocks below, otherwise they will try to execute at the same time!.
+// Uncomment example below. Be sure to leave commented the other three execution blocks, otherwise they will try to execute at the same time!.
 
 /*
 a.aCall (undefined, [
@@ -56,7 +56,7 @@ a.aCall (undefined, [
 
 // *** PARALLEL EXECUTION ***
 
-// Uncomment example below. Be sure to leave commented the other two execution blocks below, otherwise they will try to execute at the same time!.
+// Uncomment example below. Be sure to leave commented the other three execution blocks, otherwise they will try to execute at the same time!.
 
 /*
 a.aCall (undefined, [
@@ -68,5 +68,20 @@ a.aCall (undefined, [
    [function (aStack) {
       console.log ('aFork operation ready. Result was', aStack.last);
    }]
+]);
+*/
+
+// *** TWO USEFUL FUNCTIONS ***
+
+// Uncomment example below. Be sure to leave commented the other three execution blocks, otherwise they will try to execute at the same time!.
+
+/*
+a.aStop (undefined, false, [
+   [a.log, 'was returned by the previous call'],
+   [write_and_increment, 'count.txt'],
+   [a.log, 'was returned by the previous call'],
+   [write_and_increment],
+   [a.log, 'was returned by the previous call'],
+   [write_and_increment, 'count.txt'],
 ]);
 */

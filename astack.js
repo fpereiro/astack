@@ -1,5 +1,5 @@
 /*
-aStack - v1.1.1
+aStack - v1.1.2
 
 Written by Federico Pereiro (fpereiro@gmail.com) and released into the public domain.
 
@@ -225,12 +225,18 @@ Please refer to README.md to see what this is about.
    }
 
    a.log = function (aStack) {
+      // We want Arguments to hold all the arguments, with the sole exception that we don't want aStack.last to be there.
       var Arguments = [];
       for (var iterator in arguments) {
-         Arguments.push (arguments [iterator]);
+         if (iterator === '0') {
+            Arguments [0] = {};
+            for (var key in aStack) {
+               if (key !== 'aPath') Arguments [0] [key] = aStack [key];
+            }
+         }
+         else Arguments.push (arguments [iterator]);
       }
-      delete Arguments [0].aPath;
-      log.apply (a.log, Arguments);
+      log.apply (log, Arguments);
       a.aReturn (aStack, aStack.last);
    }
 

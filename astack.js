@@ -1,5 +1,5 @@
 /*
-aStack - v1.1.3
+aStack - v1.1.4
 
 Written by Federico Pereiro (fpereiro@gmail.com) and released into the public domain.
 
@@ -121,7 +121,6 @@ Please refer to README.md to see what this is about.
 
    a.aReturn = function (aStack, last, copy) {
       if (a.validate.aStack (aStack) === false) {
-         log (arguments.callee.caller + '');
          return false;
       }
 

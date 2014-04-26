@@ -1,5 +1,5 @@
 /*
-aStack - v1.1.4
+aStack - v1.1.5
 
 Written by Federico Pereiro (fpereiro@gmail.com) and released into the public domain.
 
@@ -213,15 +213,15 @@ Please refer to README.md to see what this is about.
    a.aStop = function (aStack, stop_value, aPath) {
 
       if (a.validate.aPath (aPath) === false) return false;
-      stop_value = stop_value + '';
 
       if (aPath.length === 0) return a.aReturn (aStack, aStack.last);
 
       var next = aPath.shift ();
-      a.aCond (aStack, next, {
-         stop_on: [a.aReturn, stop_value],
-         default: [a.aStop, stop_value, aPath]
-      });
+
+      var aMap = {default: [a.aStop, stop_value, aPath]};
+      aMap [stop_value + ''] = [a.aReturn, stop_value];
+
+      a.aCond (aStack, next, aMap);
    }
 
    a.log = function (aStack) {

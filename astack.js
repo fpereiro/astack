@@ -1,5 +1,5 @@
 /*
-aStack - v1.1.5
+aStack - v1.1.6
 
 Written by Federico Pereiro (fpereiro@gmail.com) and released into the public domain.
 
@@ -9,17 +9,6 @@ Please refer to README.md to see what this is about.
 (function () {
 
    // *** SETUP ***
-
-   // Useful shorthand.
-   if (typeof exports !== 'undefined') {
-      var log = console.log;
-   }
-   else {
-      window.log = function () {
-         if (console) console.log (arguments);
-         else alert (arguments);
-      }
-   }
 
    // This code allows us to export the lith in the browser and in the server.
    // Taken from http://backbonejs.org/docs/backbone.html
@@ -47,7 +36,7 @@ Please refer to README.md to see what this is about.
    }
 
    function e () {
-      log (arguments);
+      console.log (arguments);
       return false;
    }
 
@@ -96,20 +85,20 @@ Please refer to README.md to see what this is about.
          aStack = {aPath: []}
       }
 
-      if ((a.validate.aStack (aStack) && a.validate.aPath (aPath)) === false) {
-        return false;
-      }
+      if (a.validate.aStack (aStack) === false) return false;
+
+      if (a.validate.aPath (aPath) === false) return a.aReturn (aStack, false);
 
       if (type (aPath [0]) === 'function') aPath = [aPath];
 
       aStack.aPath = aPath.concat (aStack.aPath);
 
-      if (aStack.aPath.length === 0) return true;
+      if (aStack.aPath.length === 0) return aStack.last;
 
       var aStep = aStack.aPath.shift ();
 
       if (a.validate.aStep (aStep) === false) {
-         return false;
+         return a.aReturn (aStack, false);
       }
 
       var aFunction = aStep.shift ();
@@ -132,6 +121,7 @@ Please refer to README.md to see what this is about.
 
       aStack.last = last;
       a.aCall (aStack, []);
+      return aStack.last;
    }
 
    // *** CONDITIONAL EXECUTION ***
@@ -139,7 +129,7 @@ Please refer to README.md to see what this is about.
    a.aPick = function (aStack, aMap) {
 
       if (a.validate.aMap (aMap) === false) {
-         return false;
+         return a.aReturn (aStack, false);
       }
 
       var last = aStack.last + '';
@@ -155,14 +145,19 @@ Please refer to README.md to see what this is about.
       else {
          aPath = aMap [last];
       }
+
       a.aCall (aStack, aPath);
    }
 
    a.aCond = function (aStack, aCond, aMap) {
 
-      if (a.validate.aPath (aCond) === false) return false;
+      if (aStack === undefined) {
+         aStack = {aPath: []}
+      }
 
-      if (a.validate.aMap (aMap) === false) return false;
+      if (a.validate.aPath (aCond) === false) return a.aReturn (aStack, false);
+
+      if (a.validate.aMap (aMap) === false) return a.aReturn (aStack, false);
 
       if (type (aCond [0]) === 'function') aCond = [aCond];
 
@@ -175,7 +170,11 @@ Please refer to README.md to see what this is about.
 
    a.aFork = function (aStack, aPath) {
 
-      if (a.validate.aPath (aPath) === false) return false;
+      if (aStack === undefined) {
+         aStack = {aPath: []}
+      }
+
+      if (a.validate.aPath (aPath) === false) return a.aReturn (aStack, false);
 
       var original_aStack = aStack;
       var paths = aPath.length;
@@ -197,7 +196,7 @@ Please refer to README.md to see what this is about.
       }
 
       for (var k in aPath) {
-         if (a.validate.aStep (aPath [k]) === false) return false;
+         if (a.validate.aStep (aPath [k]) === false) return a.aReturn (aStack, false);
       }
 
       for (var k in aPath) {
@@ -212,7 +211,11 @@ Please refer to README.md to see what this is about.
 
    a.aStop = function (aStack, stop_value, aPath) {
 
-      if (a.validate.aPath (aPath) === false) return false;
+      if (aStack === undefined) {
+         aStack = {aPath: []}
+      }
+
+      if (a.validate.aPath (aPath) === false) return a.aReturn (aStack, false);
 
       if (aPath.length === 0) return a.aReturn (aStack, aStack.last);
 
@@ -236,7 +239,7 @@ Please refer to README.md to see what this is about.
          }
          else Arguments.push (arguments [iterator]);
       }
-      log.apply (log, Arguments);
+      console.log.apply (console.log, Arguments);
       a.aReturn (aStack, aStack.last);
    }
 

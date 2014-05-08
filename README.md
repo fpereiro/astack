@@ -283,9 +283,23 @@ To inspect the contents of the `aStack`, place an `aStep` calling `log` just bel
 
 `log` prints the contents of the aStack, removing first `aStack.aPath`, and then adding further arguments passed to it. It then `aReturns` aStack.last, so execution resumes unaffected.
 
+## A note on returning false values from validation
+
+As a convention, when an `aFunction` detects an invalid input, it both returns and aReturns `false`. The `return` is placed so that the function will cease executing, and the `aReturn` sends that false value to the next function in the `aStack`.
+
+You can see this in several places of the code, in lines such as `if (test_function (input) === false) return a.aReturn (aStack, false);`.
+
+The only exception is when validating an `aStack`. If the `aStack` turns to be invalid, it makes no sense to `aReturn` false, since there's no valid next function to which return the value.
+
+## A note on undefined `aStack`s.
+
+Many functions in `aStack` (namely `aCall`, `aCond`, `aFork` and `aStop`) will create an `aStack` if they receive an undefined one. This is useful when you want to do the first call to an `aFunction`, because there is no previous `aStack` to which that function has to return.
+
+You can notice this in all of the examples above, where `aCall` receives undefined as its first argument.
+
 ## Source code
 
-The complete source code is contained in `astack.js`. It is about 240 lines long.
+The complete source code is contained in `astack.js`. It is about 250 lines long.
 
 ## License
 

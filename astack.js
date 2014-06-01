@@ -1,5 +1,5 @@
 /*
-aStack - v1.1.6
+aStack - v1.1.7
 
 Written by Federico Pereiro (fpereiro@gmail.com) and released into the public domain.
 
@@ -10,14 +10,14 @@ Please refer to README.md to see what this is about.
 
    // *** SETUP ***
 
-   // This code allows us to export the lith in the browser and in the server.
+   // This code allows us to export aStack in the browser and in the server.
    // Taken from http://backbonejs.org/docs/backbone.html
    var root = this;
    var a;
    if (typeof exports !== 'undefined') a = exports;
    else                                a = root.a = {};
 
-   // The function below is from the teishi library (github.com/fpereiro/teishi). I added it manually because it wasn't worth it to add a dependence.
+   // The function below is from the teishi library (github.com/fpereiro/teishi). I added it manually because it wasn't worth it to add a dependency.
    function type (value) {
       var type = typeof value;
       if (type === 'object') {

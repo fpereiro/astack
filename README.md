@@ -2,7 +2,7 @@
 
 aStack is a Javascript tool for writing asynchronous functions almost as if they were synchronous.
 
-aStack strives to be the simplest solution to the [async problem](https://github.com/fpereiro/astack#The_async_problem). I confronted this problem when writing a [Javascript toolset for devops](https://github.com/fpereiro/kaboot), where I needed to execute asynchronous functions in varying order. aStack emerged from that need.
+aStack strives to be the simplest solution to the [async problem](https://github.com/fpereiro/astack#the-async-problem). I confronted this problem when writing a [Javascript toolset for devops](https://github.com/fpereiro/kaboot), where I needed to execute asynchronous functions in varying order. aStack emerged from that need.
 
 Besides sequential execution, aStack also supports conditional and parallel execution.
 
@@ -19,8 +19,8 @@ And you also can use it in node.js. To install: `npm install astack`
 
 - [Usage examples](https://github.com/fpereiro/astack#usage-examples): see aStack in action.
 - [The async problem](https://github.com/fpereiro/astack#the-async-problem): why we are doing this.
-- [From callbacks to aStack](https://github.com/fpereiro/astack#from-callbacks-to-aStack): count the differences.
-- [The elements of aStack](https://github.com/fpereiro/astack#the-elements-of-aStack): the gist.
+- [From callbacks to aStack](https://github.com/fpereiro/astack#from-callbacks-to-astack): count the differences.
+- [The elements of aStack](https://github.com/fpereiro/astack#the-elements-of-astack): the gist.
 - [Four more functions](https://github.com/fpereiro/astack#four-more-functions): conditional execution, parallel execution, and a couple more.
 
 ## Usage examples

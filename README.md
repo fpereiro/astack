@@ -17,11 +17,11 @@ And you also can use it in node.js. To install: `npm install astack`
 
 ## Index
 
-- [Usage examples](https://github.com/fpereiro/astack#usage_examples): see aStack in action.
-- [The async problem](https://github.com/fpereiro/astack#the_async_problem): why we are doing this.
-- [From callbacks to aStack](https://github.com/fpereiro/astack#from_callbacks_to_aStack): count the differences.
-- [The elements of aStack](https://github.com/fpereiro/astack#the_elements_of_aStack): the gist.
-- [Four more functions](https://github.com/fpereiro/astack#four_more_functions): conditional execution, parallel execution, and a couple more.
+- [Usage examples](https://github.com/fpereiro/astack#usage-examples): see aStack in action.
+- [The async problem](https://github.com/fpereiro/astack#the-async-problem): why we are doing this.
+- [From callbacks to aStack](https://github.com/fpereiro/astack#from-callbacks-to-aStack): count the differences.
+- [The elements of aStack](https://github.com/fpereiro/astack#the-elements-of-aStack): the gist.
+- [Four more functions](https://github.com/fpereiro/astack#four-more-functions): conditional execution, parallel execution, and a couple more.
 
 ## Usage examples
 

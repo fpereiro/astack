@@ -1,5 +1,5 @@
 /*
-aStack - v2.0.0
+aStack - v2.0.1
 
 Written by Federico Pereiro (fpereiro@gmail.com) and released into the public domain.
 
@@ -59,6 +59,7 @@ Please refer to README.md to see what this is about.
       if (type (aStep [0]) !== 'function') {
          return (e ('First element of aStep must be a function but instead is', aStep [0]));
       }
+      return true;
    }
 
    a.validate.aStack = function (aStack) {

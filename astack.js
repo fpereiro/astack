@@ -1,5 +1,5 @@
 /*
-aStack - v1.1.7
+aStack - v2.0.0
 
 Written by Federico Pereiro (fpereiro@gmail.com) and released into the public domain.
 
@@ -36,7 +36,10 @@ Please refer to README.md to see what this is about.
    }
 
    function e () {
-      console.log (arguments);
+      for (var argument in arguments) {
+         process.stdout.write (arguments [argument] + ' ');
+      }
+      process.stdout.write ('\n');
       return false;
    }
 
@@ -44,27 +47,25 @@ Please refer to README.md to see what this is about.
 
    a.validate = {};
 
-   a.validate.aStep = function (aStep) {
-      if (type (aStep) !== 'array') {
-         return (e ('aStep must be an array but instead is', aStep));
-      }
-      if (type (aStep [0]) !== 'function') {
-         return (e ('First element of aStep must be a function but instead is', aStep));
-      }
-   }
-
-   a.validate.aPath = function (aPath) {
-      if (type (aPath) !== 'array') {
-         return (e ('aPath or aStep must be an array but instead is', aPath));
+   a.validate.aPest = function (aPest) {
+      if (type (aPest) !== 'array') {
+         return (e ('aPest (aPath or aStep) must be an array but instead is', aPest));
       }
       return true;
+   }
+
+   a.validate.aStep = function (aStep) {
+      if (a.validate.aPest (aStep) === false) return false;
+      if (type (aStep [0]) !== 'function') {
+         return (e ('First element of aStep must be a function but instead is', aStep [0]));
+      }
    }
 
    a.validate.aStack = function (aStack) {
       if (type (aStack) !== 'object') {
          return (e ('aStack must be an object but instead is', aStack));
       }
-      if (a.validate.aPath (aStack.aPath) === false) {
+      if (a.validate.aPest (aStack.aPath) === false) {
          return false;
       }
       return true;
@@ -77,19 +78,38 @@ Please refer to README.md to see what this is about.
       return true;
    }
 
+   // createIf means that it returns a new aStack, if it received an undefined one as argument, or returns that aStack if it's not undefined.
+   a.createIf = function (aStack) {
+      if (aStack !== undefined) return aStack;
+      else return aStack = {aPath: []}
+   }
+
+   a.pestToPath = function (aPest) {
+      if (a.validate.aPest (aPest) === false) return false;
+      if (type (aPest [0]) === 'array' || aPest.length === 0) return aPest;
+      else return [aPest];
+   }
+
    // *** SEQUENTIAL EXECUTION ***
 
-   a.aCall = function (aStack, aPath) {
+   a.call = function () {
 
-      if (aStack === undefined) {
-         aStack = {aPath: []}
+      var aStack;
+      var aPest;
+
+      if (arguments.length === 1) aPest = arguments [0];
+      else {
+         aStack = arguments [0];
+         aPest = arguments [1];
       }
+
+      aStack = a.createIf (aStack);
 
       if (a.validate.aStack (aStack) === false) return false;
 
-      if (a.validate.aPath (aPath) === false) return a.aReturn (aStack, false);
+      if (a.validate.aPest (aPest) === false) return a.return (aStack, false);
 
-      if (type (aPath [0]) === 'function') aPath = [aPath];
+      var aPath = a.pestToPath (aPest);
 
       aStack.aPath = aPath.concat (aStack.aPath);
 
@@ -97,84 +117,114 @@ Please refer to README.md to see what this is about.
 
       var aStep = aStack.aPath.shift ();
 
-      if (a.validate.aStep (aStep) === false) {
-         return a.aReturn (aStack, false);
-      }
+      if (a.validate.aStep (aStep) === false) return false;
 
       var aFunction = aStep.shift ();
+
+      for (var Argument in aStep) {
+         if (type (aStep [Argument]) === 'string' && aStep [Argument].match (/^@.+$/)) {
+            var parameterName = aStep [Argument].match (/^@.+$/) [0].replace ('@', '');
+            aStep [Argument] = aStack [parameterName]
+         }
+      }
 
       aStep.unshift (aStack);
 
       aFunction.apply (aFunction, aStep);
    }
 
-   a.aReturn = function (aStack, last, copy) {
-      if (a.validate.aStack (aStack) === false) {
-         return false;
+   a.return = function (aStack, last, copy) {
+      if (a.validate.aStack (aStack) === false) return false;
+
+      if (copy !== undefined && type (copy) !== 'string' && type (copy) !== 'number') {
+         return e ('copy parameter passed to a.return must be string, number or undefined');
       }
 
-      if (copy !== undefined && type (copy) !== 'string') {
-         return e ('copy parameter passed to aReturn must be string or undefined');
-      }
-
-      if (copy !== undefined) aStack [copy] = last;
+      if (copy !== undefined) aStack [copy + ''] = last;
 
       aStack.last = last;
-      a.aCall (aStack, []);
+      a.call (aStack, []);
       return aStack.last;
    }
 
    // *** CONDITIONAL EXECUTION ***
 
-   a.aPick = function (aStack, aMap) {
+   a.pick = function (aStack, aMap) {
 
       if (a.validate.aMap (aMap) === false) {
-         return a.aReturn (aStack, false);
+         return a.return (aStack, false);
       }
 
       var last = aStack.last + '';
 
-      var aPath;
+      var aPest;
 
       if (aMap [last] === undefined) {
          if (aMap ['default'] === undefined) {
             return (e ('aPick received as last argument', last, 'but aMap [', last, '] is undefined and aMap.default is also undefined!', 'aMap is:', aMap));
          }
-         aPath = aMap ['default'];
+         aPest = aMap ['default'];
       }
       else {
-         aPath = aMap [last];
+         aPest = aMap [last];
       }
 
-      a.aCall (aStack, aPath);
+      a.call (aStack, aPest);
    }
 
-   a.aCond = function (aStack, aCond, aMap) {
+   a.cond = function () {
 
-      if (aStack === undefined) {
-         aStack = {aPath: []}
+      var aStack;
+      var aCond;
+      var aMap;
+
+      if (arguments.length === 2) {
+         aCond = arguments [0];
+         aMap = arguments [1];
+      }
+      else {
+         aStack = arguments [0];
+         aCond = arguments [1];
+         aMap = arguments [2];
       }
 
-      if (a.validate.aPath (aCond) === false) return a.aReturn (aStack, false);
+      aStack = a.createIf (aStack);
 
-      if (a.validate.aMap (aMap) === false) return a.aReturn (aStack, false);
+      if (a.validate.aPest (aCond) === false) return a.return (aStack, false);
 
-      if (type (aCond [0]) === 'function') aCond = [aCond];
+      if (a.validate.aMap (aMap) === false) return a.return (aStack, false);
 
-      aCond.push ([a.aPick, aMap]);
+      aCond = a.pestToPath (aCond);
 
-      a.aCall (aStack, aCond);
+      aCond.push ([a.pick, aMap]);
+
+      a.call (aStack, aCond);
    }
 
    // *** PARALLEL EXECUTION ***
 
-   a.aFork = function (aStack, aPath) {
+   a.fork = function () {
 
-      if (aStack === undefined) {
-         aStack = {aPath: []}
+      var aStack;
+      var aPest;
+
+      if (arguments.length === 1) aPest = arguments [0];
+      else {
+         aStack = arguments [0];
+         aPest = arguments [1];
       }
 
-      if (a.validate.aPath (aPath) === false) return a.aReturn (aStack, false);
+      aStack = a.createIf (aStack);
+
+      if (a.validate.aPest (aPest) === false) return a.return (aStack, false);
+
+      if (aPest.length === 0) return a.return (aStack, []);
+
+      var aPath = a.pestToPath (aPest);
+
+      for (var k in aPath) {
+         if (a.validate.aStep (aPath [k]) === false) return a.return (aStack, false);
+      }
 
       var original_aStack = aStack;
       var paths = aPath.length;
@@ -184,23 +234,11 @@ Please refer to README.md to see what this is about.
       function collect (aStack, index) {
          results [index] = aStack.last;
          paths--;
-         if (paths === 0) {
-            a.aReturn (original_aStack, results);
-         }
-      }
-
-      // If aPath is empty, we aReturn an empty path, otherwise, the function would not aReturn anything.
-      if (aPath.length === 0) {
-         a.aReturn (aStack, []);
-         return;
+         if (paths === 0) a.return (original_aStack, results);
       }
 
       for (var k in aPath) {
-         if (a.validate.aStep (aPath [k]) === false) return a.aReturn (aStack, false);
-      }
-
-      for (var k in aPath) {
-         a.aCall (undefined, [
+         a.call (undefined, [
             aPath [k],
             [collect, k]
          ]);
@@ -209,22 +247,36 @@ Please refer to README.md to see what this is about.
 
    // *** TWO USEFUL FUNCTIONS ***
 
-   a.aStop = function (aStack, stop_value, aPath) {
+   a.stop = function () {
 
-      if (aStack === undefined) {
-         aStack = {aPath: []}
+      var aStack;
+      var stopValue;
+      var aPest;
+
+      if (arguments.length === 2) {
+         stopValue = arguments [0];
+         aPest = arguments [1];
+      }
+      else {
+         aStack = arguments [0];
+         stopValue = arguments [1];
+         aPest = arguments [2];
       }
 
-      if (a.validate.aPath (aPath) === false) return a.aReturn (aStack, false);
+      aStack = a.createIf (aStack);
 
-      if (aPath.length === 0) return a.aReturn (aStack, aStack.last);
+      if (a.validate.aPest (aPest) === false) return a.aReturn (aStack, false);
+
+      if (aPest.length === 0) return a.return (aStack, aStack.last);
+
+      var aPath = a.pestToPath (aPest);
 
       var next = aPath.shift ();
 
-      var aMap = {default: [a.aStop, stop_value, aPath]};
-      aMap [stop_value + ''] = [a.aReturn, stop_value];
+      var aMap = {default: [a.stop, stopValue, aPath]};
+      aMap [stopValue + ''] = [a.return, stopValue];
 
-      a.aCond (aStack, next, aMap);
+      a.cond (aStack, next, aMap);
    }
 
    a.log = function (aStack) {
@@ -240,7 +292,7 @@ Please refer to README.md to see what this is about.
          else Arguments.push (arguments [iterator]);
       }
       console.log.apply (console.log, Arguments);
-      a.aReturn (aStack, aStack.last);
+      a.return (aStack, aStack.last);
    }
 
 }).call (this);

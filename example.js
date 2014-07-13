@@ -7,12 +7,12 @@ var a = require ('./astack.js');
 
 function write_file (aStack, path, data) {
    if (typeof (path) !== 'string') {
-      a.aReturn (aStack, false);
+      a.return (aStack, false);
    }
    else {
       fs.writeFile (path, data, {encoding: 'utf8'}, function () {
          console.log ('Current value of', path, 'is', data);
-         a.aReturn (aStack, true);
+         a.return (aStack, true);
       });
    }
 }
@@ -23,65 +23,72 @@ function increment_file (aStack, path) {
    });
 }
 
-// Uncomment example below. Be sure to leave commented the other three execution blocks, otherwise they will try to execute at the same time!.
-
-/*
-a.aCall (undefined, [
-   [write_file, 'count.txt', '0'],
-   [increment_file, 'count.txt'],
-   [increment_file, 'count.txt'],
-   [increment_file, 'count.txt']
-]);
-*/
+function SEQUENTIAL (aStack) {
+   console.log ('Starting SEQUENTIAL test.');
+   a.call (aStack, [
+      [write_file, 'count.txt', '0'],
+      [increment_file, 'count.txt'],
+      [increment_file, 'count.txt'],
+      [increment_file, 'count.txt']
+   ]);
+}
 
 // *** CONDITIONAL EXECUTION ***
 
 function write_and_increment (aStack, path) {
-   a.aCond (aStack, [write_file, path, '0'], {
+   a.cond (aStack, [write_file, path, '0'], {
       true: [increment_file, path],
       false: [function (aStack) {
          console.log ('There was an error when writing to the file', path, 'so no incrementing will take place.');
+         a.return (aStack, false);
       }]
    });
 }
 
-// Uncomment example below. Be sure to leave commented the other three execution blocks, otherwise they will try to execute at the same time!.
-
-/*
-a.aCall (undefined, [
-   [write_and_increment, 'count.txt'],
-   [write_and_increment]
-]);
-*/
+function CONDITIONAL (aStack) {
+   console.log ('Starting CONDITIONAL test.');
+   a.call (aStack, [
+      [write_and_increment, 'count.txt'],
+      [write_and_increment]
+   ]);
+}
 
 // *** PARALLEL EXECUTION ***
 
-// Uncomment example below. Be sure to leave commented the other three execution blocks, otherwise they will try to execute at the same time!.
-
-/*
-a.aCall (undefined, [
-   [a.aFork, [
-      [write_and_increment, 'count_0.txt'],
-      [write_and_increment, 'count_1.txt'],
-      [write_and_increment, 'count_2.txt']
-   ]],
-   [function (aStack) {
-      console.log ('aFork operation ready. Result was', aStack.last);
-   }]
-]);
-*/
+function PARALLEL (aStack) {
+   console.log ('Starting PARALLEL test.');
+   a.call (aStack, [
+      [a.fork, [
+         [write_and_increment, 'count_0.txt'],
+         [write_and_increment, 'count_1.txt'],
+         [write_and_increment, 'count_2.txt']
+      ]],
+      [function (aStack) {
+         console.log ('a.fork operation ready. Result was', aStack.last);
+         a.return (aStack, true);
+      }]
+   ]);
+}
 
 // *** TWO USEFUL FUNCTIONS ***
 
-// Uncomment example below. Be sure to leave commented the other three execution blocks, otherwise they will try to execute at the same time!.
+function STOP (aStack) {
+   console.log ('Starting STOP test.');
+   a.stop (aStack, false, [
+      [a.log, 'was returned by the previous call'],
+      [write_and_increment, 'count.txt'],
+      [a.log, 'was returned by the previous call'],
+      [write_and_increment],
+      [a.log, 'was returned by the previous call'],
+      [write_and_increment, 'count.txt'],
+   ]);
+}
 
-/*
-a.aStop (undefined, false, [
-   [a.log, 'was returned by the previous call'],
-   [write_and_increment, 'count.txt'],
-   [a.log, 'was returned by the previous call'],
-   [write_and_increment],
-   [a.log, 'was returned by the previous call'],
-   [write_and_increment, 'count.txt'],
+// *** INVOKING ALL THE EXAMPLES IN SEQUENCE ***
+
+a.call ([
+   [SEQUENTIAL],
+   [CONDITIONAL],
+   [PARALLEL],
+   [STOP]
 ]);
-*/

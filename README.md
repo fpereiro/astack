@@ -331,7 +331,7 @@ The `aStep` represents a single step in a sequence of asynchronous functions.
 
 #### `aPath`
 
-The `aPath` is an array of zero or more `aStep`s. An `aPath` is, in fact, a sequence of asynchronous functions.
+The `aPath` is an array containing zero or more `aStep`s. An `aPath` is, in fact, a sequence of asynchronous functions.
 
 `aPath = [aStep, ...]`
 

@@ -512,7 +512,7 @@ To sum up, `call` takes two `aPath`s (one passed directly, the other one within 
 2. Set `aStack.last` to the `last` argument.
 3. Call `call` with the `aStack` and an empty `aPath`.
 
-Actually, `return` can take an optional third argument, named `copy`, which should be a string. A copy of the return value will be stored in the aStack, under the key named as the `copy` argument.
+Actually, `return` can take an optional third argument, named `copy`, which should be a string. A copy of the return value will be stored in the aStack, under the key named as the `copy` argument. For example, if you write `a.return (aStack, true, 'someKey')`, the next `aFunction` executed will receive an `aStack` where `aStack.someKey === true`.
 
 This functionality is useful when you want to preserve an `return`ed value for more than one `aStep`. Since every `aStep` overwrites aStack.last, when you need to preserve states along a chain of `aSteps`, just use this argument. Caution must be taken not to overuse this resource, since it's comparable to setting a global variable within the aStack - and hence, you rely on other functions you call in the middle not to modify it or use it in any way.
 
@@ -524,10 +524,12 @@ a.call ([
       a.return (aStack, 'Hey there!', 'message');
    }],
    [function (aStack) {
-      ...
+      // Here, both aStack.last and aStack.message are equal to 'Hey there!'
+      a.return (aStack, true);
    }],
    [function (aStack) {
-      // Here, aStack.message will still be equal to 'Hey there!'
+      // Here, aStack.last will be equal to true, and aStack.message will still be equal to 'Hey there!'
+      ...
    }]
 ]);
 ```

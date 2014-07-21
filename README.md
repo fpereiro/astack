@@ -586,7 +586,7 @@ To inspect the contents of the `aStack`, place an `aStep` calling `log` just bel
 
 ## Source code
 
-The complete source code is contained in `astack.js`. It is about 300 lines long.
+The complete source code is contained in `astack.js`. It is about 310 lines long.
 
 ## License
 

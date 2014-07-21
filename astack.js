@@ -1,5 +1,5 @@
 /*
-aStack - v2.0.3
+aStack - v2.0.4
 
 Written by Federico Pereiro (fpereiro@gmail.com) and released into the public domain.
 
@@ -238,9 +238,24 @@ Please refer to README.md to see what this is about.
          if (paths === 0) a.return (original_aStack, results);
       }
 
+      function copy (complex) {
+         var output = type (complex) === 'array' ? [] : {};
+         for (var i in complex) {
+            if (type (complex [i]) !== 'object' && type (complex [i]) !== 'array') {
+               output [i] = complex [i];
+            }
+            else output [i] = copy (complex [i]);
+         }
+         return output;
+      }
+
       for (var k in aPath) {
-         a.call (undefined, [
-            aPath [k],
+         // In this block we need to create a new aStack for each branch we're forking. This is important because if you pass complex elements (arrays or objects) to aFunctions that work on them, an aFunction in a certain branch can modify the aStack of another one, and this is unacceptable.
+         var new_aStack = copy (aStack);
+         new_aStack.aPath = [];
+
+         a.call (new_aStack, [
+            copy (aPath [k]),
             [collect, k]
          ]);
       }

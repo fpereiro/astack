@@ -22,6 +22,7 @@ And you also can use it in node.js. To install: `npm install astack`
 - [From callbacks to aStack](https://github.com/fpereiro/astack#from-callbacks-to-astack): count the differences.
 - [The elements of aStack](https://github.com/fpereiro/astack#the-elements-of-astack): the gist.
 - [Four more functions](https://github.com/fpereiro/astack#four-more-functions): conditional execution, parallel execution, and a couple more.
+- [Annotated source code](https://github.com/fpereiro/astack#source-code).
 
 ## Usage examples
 
@@ -1077,6 +1078,7 @@ We write a `catch` block. If we're here, the dot notation generated an exception
             catch (error) {
                aStep [Argument] = undefined;
             }
+```
 
 We're done with stack parameters, so we close the conditional and the `aStep` loop.
 

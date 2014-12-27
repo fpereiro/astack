@@ -1,116 +1,108 @@
 /*
-aStack - v2.0.4
+aStack - v2.1.0
 
 Written by Federico Pereiro (fpereiro@gmail.com) and released into the public domain.
 
-Please refer to README.md to see what this is about.
+Please refer to readme.md to read the annotated source.
 */
 
 (function () {
 
    // *** SETUP ***
 
-   // This code allows us to export aStack in the browser and in the server.
-   // Taken from http://backbonejs.org/docs/backbone.html
-   var root = this;
-   var a;
-   if (typeof exports !== 'undefined') a = exports;
-   else                                a = root.a = {};
+   var isNode = typeof exports === 'object';
 
-   // The function below is from the teishi library (github.com/fpereiro/teishi). I added it manually because it wasn't worth it to add a dependency.
+   if (isNode) var a = exports;
+   else        var a = window.a = {};
+
+   // *** HELPER FUNCTIONS ***
+
    function type (value) {
       var type = typeof value;
+      if (type === 'number') {
+         if      (isNaN (value))      type = 'nan';
+         else if (! isFinite (value)) type = 'infinity';
+         else if (value % 1 === 0)    type = 'integer';
+         else                         type = 'float';
+      }
       if (type === 'object') {
-         if (value) {
-            if (Object.prototype.toString.call (value) == '[object Array]') {
-               type = 'array';
-            }
-            if (value instanceof RegExp) {
-               type = 'regex';
-            }
-         } else {
-            type = 'null';
-         }
+         if (value === null)                                               type = 'null';
+         if (Object.prototype.toString.call (value) === '[object Array]')  type = 'array';
+         if (Object.prototype.toString.call (value) === '[object RegExp]') type = 'regex';
       }
       return type;
    }
 
    function e () {
-      for (var argument in arguments) {
-         process.stdout.write (arguments [argument] + ' ');
-      }
-      process.stdout.write ('\n');
+      console.log.apply (console.log, arguments);
       return false;
+   }
+
+   function copy (input) {
+
+      if (type (input) !== 'object' && type (input) !== 'array') return input;
+
+      var output = type (input) === 'array' ? [] : {};
+
+      for (var i in input) {
+         output [i] = copy (input [i]);
+      }
+
+      return output;
    }
 
    // *** VALIDATION ***
 
-   a.validate = {};
-
-   a.validate.aPest = function (aPest) {
-      if (type (aPest) !== 'array') {
-         return (e ('aPest (aPath or aStep) must be an array but instead is', aPest));
+   a.validate = {
+      aPath: function (input) {
+         if (type (input) !== 'array') {
+            return (e ('aPath or aStep must be an array but instead is', input, 'with type', type (input)));
+         }
+         if (type (input [0]) === 'function') return 'aStep';
+                                              return 'aPath';
+      },
+      aStack: function (aStack) {
+         if (type (aStack) !== 'object') {
+            return (e ('aStack must be an array but instead is', aStack, 'with type', type (aStack)));
+         }
+         if (a.validate.aPath (aStack.aPath) === false) return false;
+         return true;
       }
-      return true;
    }
 
-   a.validate.aStep = function (aStep) {
-      if (a.validate.aPest (aStep) === false) return false;
-      if (type (aStep [0]) !== 'function') {
-         return (e ('First element of aStep must be a function but instead is', aStep [0]));
-      }
-      return true;
+   a.create = function () {
+      return {aPath: []}
    }
 
-   a.validate.aStack = function (aStack) {
-      if (type (aStack) !== 'object') {
-         return (e ('aStack must be an object but instead is', aStack));
+   a.flatten = function (input) {
+      var type = a.validate.aPath (input);
+      if (type === false)   return false;
+      if (type === 'aStep') return [input];
+      if (type === 'aPath') {
+         var aPath = [];
+         for (var i in input) {
+            var result = a.flatten (input [i]);
+            if (result === false) return false;
+            else aPath = aPath.concat (result);
+         }
+         return aPath;
       }
-      if (a.validate.aPest (aStack.aPath) === false) {
-         return false;
-      }
-      return true;
-   }
-
-   a.validate.aMap = function (aMap) {
-      if (type (aMap) !== 'object') {
-         return (e ('aMap must be an object but instead is', aMap));
-      }
-      return true;
-   }
-
-   // createIf means that it returns a new aStack, if it received an undefined one as argument, or returns that aStack if it's not undefined.
-   a.createIf = function (aStack) {
-      if (aStack !== undefined) return aStack;
-      else return aStack = {aPath: []}
-   }
-
-   a.pestToPath = function (aPest) {
-      if (a.validate.aPest (aPest) === false) return false;
-      if (type (aPest [0]) === 'array' || aPest.length === 0) return aPest;
-      else return [aPest];
    }
 
    // *** SEQUENTIAL EXECUTION ***
 
    a.call = function () {
 
-      var aStack;
-      var aPest;
-
-      if (arguments.length === 1) aPest = arguments [0];
-      else {
-         aStack = arguments [0];
-         aPest = arguments [1];
-      }
-
-      aStack = a.createIf (aStack);
+      var aStack   = type (arguments [0]) !== 'object' ? a.create ()   : arguments [0];
+      var aPath    = type (arguments [0]) !== 'object' ? arguments [0] : arguments [1];
+      var external = arguments [arguments.length - 1] === true ? false : true;
 
       if (a.validate.aStack (aStack) === false) return false;
 
-      if (a.validate.aPest (aPest) === false) return a.return (aStack, false);
-
-      var aPath = a.pestToPath (aPest);
+      if (external) {
+         aPath = a.flatten (aPath);
+         if (aPath === false) return a.return (aStack, false);
+      }
 
       aStack.aPath = aPath.concat (aStack.aPath);
 
@@ -118,144 +110,100 @@ Please refer to README.md to see what this is about.
 
       var aStep = aStack.aPath.shift ();
 
-      if (a.validate.aStep (aStep) === false) return false;
-
       var aFunction = aStep.shift ();
 
       for (var Argument in aStep) {
          if (type (aStep [Argument]) === 'string' && aStep [Argument].match (/^@.+$/)) {
-            var parameterName = aStep [Argument].match (/^@.+$/) [0].replace ('@', '');
-            aStep [Argument] = aStack [parameterName]
+            try {
+               var parameterName = aStep [Argument].match (/^@/) [0].replace (/^@/, '');
+               parameterName = parameterName.split ('.');
+               for (var item in parameterName) {
+                  if (item === '0') aStep [Argument] = aStack [parameterName [item]];
+                  else aStep [Argument] = aStep [Argument] [parameterName [item]];
+               }
+            }
+            catch (error) {
+               aStep [Argument] = undefined;
+            }
          }
       }
 
       aStep.unshift (aStack);
 
-      aFunction.apply (aFunction, aStep);
+      return aFunction.apply (aFunction, aStep);
    }
 
    a.return = function (aStack, last, copy) {
       if (a.validate.aStack (aStack) === false) return false;
 
-      if (copy !== undefined && type (copy) !== 'string' && type (copy) !== 'number') {
-         return e ('copy parameter passed to a.return must be string, number or undefined');
+      aStack.last = last;
+
+      if (copy !== undefined && type (copy) !== 'string' && type (copy) !== 'integer') {
+         return e ('copy parameter passed to a.return must be string, integer or undefined but instead is', copy, 'with type', type (copy));
       }
 
-      if (copy !== undefined) aStack [copy + ''] = last;
+      if (copy !== undefined) aStack [copy] = last;
 
-      aStack.last = last;
-      a.call (aStack, []);
-      return aStack.last;
+      return a.call (aStack, []);
    }
 
    // *** CONDITIONAL EXECUTION ***
 
-   a.pick = function (aStack, aMap) {
-
-      if (a.validate.aMap (aMap) === false) {
-         return a.return (aStack, false);
-      }
-
-      var last = aStack.last + '';
-
-      var aPest;
-
-      if (aMap [last] === undefined) {
-         if (aMap ['default'] === undefined) {
-            return (e ('aPick received as last argument', last, 'but aMap [', last, '] is undefined and aMap.default is also undefined!', 'aMap is:', aMap));
-         }
-         aPest = aMap ['default'];
-      }
-      else {
-         aPest = aMap [last];
-      }
-
-      a.call (aStack, aPest);
-   }
-
    a.cond = function () {
 
-      var aStack;
-      var aCond;
-      var aMap;
+      var aStack   = type (arguments [0]) !== 'object' ? a.create ()   : arguments [0];
+      var aCond    = type (arguments [0]) !== 'object' ? arguments [0] : arguments [1];
+      var aMap     = type (arguments [0]) !== 'object' ? arguments [1] : arguments [2];
+      var external = arguments [arguments.length - 1] === true ? false : true;
 
-      if (arguments.length === 2) {
-         aCond = arguments [0];
-         aMap = arguments [1];
-      }
-      else {
-         aStack = arguments [0];
-         aCond = arguments [1];
-         aMap = arguments [2];
+      if (type (aMap) !== 'object') return a.return (aStack, false);
+
+      if (external) {
+         aCond = a.flatten (aCond);
+         if (aCond === false) return a.return (aStack, false);
       }
 
-      aStack = a.createIf (aStack);
+      aCond.push ([function (aStack) {
+         if (aMap [aStack.last])      return a.call (aStack, aMap [aStack.last]);
+         if (aMap ['default'])        return a.call (aStack, aMap ['default']);
+         return a.return (aStack, e ('aPick received as last argument', last, 'but aMap [', last, '] is undefined and aMap.default is also undefined!', 'aMap is:', aMap));
+      }]);
 
-      if (a.validate.aPest (aCond) === false) return a.return (aStack, false);
-
-      if (a.validate.aMap (aMap) === false) return a.return (aStack, false);
-
-      aCond = a.pestToPath (aCond);
-
-      aCond.push ([a.pick, aMap]);
-
-      a.call (aStack, aCond);
+      return a.call (aStack, aCond, true);
    }
 
    // *** PARALLEL EXECUTION ***
 
    a.fork = function () {
 
-      var aStack;
-      var aPest;
+      var aStack = type (arguments [0]) !== 'object' ? a.create ()   : arguments [0];
+      var aPath  = type (arguments [0]) !== 'object' ? arguments [0] : arguments [1];
 
-      if (arguments.length === 1) aPest = arguments [0];
-      else {
-         aStack = arguments [0];
-         aPest = arguments [1];
-      }
+      aPath = a.flatten (aPath);
 
-      aStack = a.createIf (aStack);
+      if (aPath === false) return a.return (aStack, false);
 
-      if (a.validate.aPest (aPest) === false) return a.return (aStack, false);
+      if (aPath.length === 0) return a.return (aStack, []);
 
-      if (aPest.length === 0) return a.return (aStack, []);
+      var originalStack = aStack;
+      var steps = aPath.length;
+      var output = [];
 
-      var aPath = a.pestToPath (aPest);
-
-      for (var k in aPath) {
-         if (a.validate.aStep (aPath [k]) === false) return a.return (aStack, false);
-      }
-
-      var original_aStack = aStack;
-      var paths = aPath.length;
-      var results = [];
-
-      // Collect is the callback function invoked by each aStep within the aPath passed to the function.
       function collect (aStack, index) {
-         results [index] = aStack.last;
-         paths--;
-         if (paths === 0) a.return (original_aStack, results);
-      }
-
-      function copy (complex) {
-         var output = type (complex) === 'array' ? [] : {};
-         for (var i in complex) {
-            if (type (complex [i]) !== 'object' && type (complex [i]) !== 'array') {
-               output [i] = complex [i];
-            }
-            else output [i] = copy (complex [i]);
+         output [index] = aStack.last;
+         for (var key in aStack) {
+            if (key !== 'aPath' && key !== 'last') originalStack [key] = aStack [key];
          }
-         return output;
+         steps--;
+         if (steps === 0) return a.return (originalStack, output);
       }
 
       for (var k in aPath) {
-         // In this block we need to create a new aStack for each branch we're forking. This is important because if you pass complex elements (arrays or objects) to aFunctions that work on them, an aFunction in a certain branch can modify the aStack of another one, and this is unacceptable.
-         var new_aStack = copy (aStack);
-         new_aStack.aPath = [];
+         var newStack = copy (aStack);
+         newStack.aPath = [];
 
-         a.call (new_aStack, [
-            copy (aPath [k]),
+         a.call (newStack, [
+            aPath [k],
             [collect, k]
          ]);
       }
@@ -265,50 +213,29 @@ Please refer to README.md to see what this is about.
 
    a.stop = function () {
 
-      var aStack;
-      var stopValue;
-      var aPest;
+      var aStack    = type (arguments [0]) !== 'object' ? a.create ()   : arguments [0];
+      var stopValue = type (arguments [0]) !== 'object' ? arguments [0] : arguments [1];
+      var aPath     = type (arguments [0]) !== 'object' ? arguments [1] : arguments [2];
+      var external  = arguments [arguments.length - 1] === true ? false : true;
 
-      if (arguments.length === 2) {
-         stopValue = arguments [0];
-         aPest = arguments [1];
-      }
-      else {
-         aStack = arguments [0];
-         stopValue = arguments [1];
-         aPest = arguments [2];
+      if (external) {
+         aPath = a.flatten (aPath);
+         if (aPath === false) return a.return (aStack, false);
       }
 
-      aStack = a.createIf (aStack);
-
-      if (a.validate.aPest (aPest) === false) return a.aReturn (aStack, false);
-
-      if (aPest.length === 0) return a.return (aStack, aStack.last);
-
-      var aPath = a.pestToPath (aPest);
+      if (aPath.length === 0) return a.return (aStack, aStack.last);
 
       var next = aPath.shift ();
 
-      var aMap = {default: [a.stop, stopValue, aPath]};
-      aMap [stopValue + ''] = [a.return, stopValue];
+      var aMap = {default: [a.stop, stopValue, aPath, true]};
+      aMap [stopValue] = [a.return, stopValue];
 
-      a.cond (aStack, next, aMap);
+      return a.cond (aStack, [next], aMap, true);
    }
 
    a.log = function (aStack) {
-      // We want Arguments to hold all the arguments, with the sole exception that we don't want aStack.last to be there.
-      var Arguments = [];
-      for (var iterator in arguments) {
-         if (iterator === '0') {
-            Arguments [0] = {};
-            for (var key in aStack) {
-               if (key !== 'aPath') Arguments [0] [key] = aStack [key];
-            }
-         }
-         else Arguments.push (arguments [iterator]);
-      }
-      console.log.apply (console.log, Arguments);
-      a.return (aStack, aStack.last);
+      console.log (arguments);
+      return a.return (aStack, aStack.last);
    }
 
-}).call (this);
+}) ();

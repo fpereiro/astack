@@ -267,8 +267,8 @@ Let's see how we can transform callback hell into aStack.
 
 ```javascript
 
-function async1 (callback, data) {
-   // Do stuff to data
+function async1 (data, callback) {
+   // Do stuff to data here...
    callback (data);
 }
 
@@ -297,11 +297,12 @@ function async1 (aStack, data) {
 
 // async2 and async3 are just like async1
 
-function asyncSequence (aStack, data) {
+function asyncSequence (aStack, data, callback) {
    a.call (aStack, [
       [async1, data],
       [async2, '@last'],
-      [async3, '@last']
+      [async3, '@last'],
+      [callback, '@last']
    ]);
 }
 ```
@@ -524,7 +525,7 @@ Notice that `a.return` is an `aFunction`, and as such, the last thing that it do
 
 `a.return` can take an optional third argument, named `copy`, which should be a string. A copy of the return value will be stored in the aStack, under the key named as the `copy` argument. For example, if you write `a.return (aStack, true, 'someKey')`, the next `aFunction` executed will receive an `aStack` where `aStack.someKey === true`.
 
-`copy` is useful when you want to preserve an `a.return`ed value for more than one `aStep`. Since every `aStep` overwrites aStack.last, when you need to preserve states along a chain of `aSteps`, just use this argument. Caution must be taken not to overuse this resource, since it's comparable to setting a global variable within the aStack - and hence, you rely on other functions you call in the middle not to modify it and not to be disturbed by it in any way.
+`copy` is useful when you want to preserve an `a.return`ed value for more than one `aStep`. Since every `aStep` overwrites aStack.last, when you need to preserve states along a chain of `aStep`s, just use this argument. Caution must be taken not to overuse this resource, since it's comparable to setting a global variable within the `aStack` - and hence, you rely on other functions you call in the middle not to modify it and not to be disturbed by it in any way.
 
 Let's see this in an example:
 
@@ -626,7 +627,7 @@ If neither `X` nor `default` are defined, `aCond` `a.return`s `false`.
 
 When the last action is executed, the results array is `a.return`ed.
 
-If you pass an empty `aPath`, `fork` will just return an empty array, and if you pass it a single `aStep`, it will return an array containing the result of `a.call`ing that `aStep`.
+If you pass an empty `aPath`, `a.fork` will just return an empty array, and if you pass it a single `aStep`, it will return an array containing the result of `a.call`ing that `aStep`.
 
 When executing `a.fork`, don't place in the `aStack` any object that cannot be copied in a straightforward way. This includes either circular objects or objects with special properties (such as an HTTP request).
 
@@ -646,7 +647,7 @@ The `stopValue` cannot be equal to `'default'`.
 
 To inspect the contents of the `aStack`, place an `aStep` calling `a.log` just below the `aStep` you wish to inspect.
 
-`a.log` prints the contents of the aStack, plus further arguments you pass to it. It then `returns` aStack.last, so execution resumes unaffected.
+`a.log` prints the contents of the aStack (but without printing the `aPath`), plus further arguments you pass to it. It then `returns` aStack.last, so execution resumes unaffected.
 
 ## Source code
 
@@ -656,7 +657,7 @@ Below is the annotated source.
 
 ```javascript
 /*
-aStack - v2.1.0
+aStack - v2.2.0
 
 Written by Federico Pereiro (fpereiro@gmail.com) and released into the public domain.
 
@@ -720,7 +721,7 @@ We define a function `e` for performing two functions:
 
 ```javascript
    function e () {
-      console.log.apply (console.log, arguments);
+      console.log (arguments);
       return false;
    }
 ```
@@ -1421,7 +1422,7 @@ We invoke `a.cond`, passing the `aStack`, `next` wrapped into an array (which ma
 - Log its arguments:
 
 ```javascript
-      console.log.apply (console.log, arguments);
+      console.log (arguments);
 ```
 
 - `return` the same value that was in `aStack.last`, so that its value remains unaltered.

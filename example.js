@@ -1,5 +1,5 @@
 /*
-aStack - v2.1.0
+aStack - v2.2.0
 
 Written by Federico Pereiro (fpereiro@gmail.com) and released into the public domain.
 
@@ -138,6 +138,121 @@ Run the examples by either including the script in a webpage or by running `node
       ]);
    }
 
+   function EXAMPLE1 (aStack) {
+
+      function async1 (data, callback) {
+         callback (data);
+      }
+
+      function async2 (data, callback) {
+         callback (data);
+      }
+
+      function async3 (data, callback) {
+         callback (data);
+      }
+
+      function asyncSequence1 (data, callback) {
+         async1 (data, function (data) {
+            async2 (data, function (data) {
+               async3 (data, function (data) {
+                  callback (data);
+               });
+            });
+         });
+      }
+
+      asyncSequence1 ('This is data!', console.log);
+
+      function async4 (aStack, data) {
+         a.return (aStack, data);
+      }
+
+      function async5 (aStack, data) {
+         a.return (aStack, data);
+      }
+
+      function async6 (aStack, data) {
+         a.return (aStack, data);
+      }
+
+      function asyncSequence2 (aStack, data, callback) {
+         a.call (aStack, [
+            [async4, data],
+            [async5, '@last'],
+            [async6, '@last'],
+            [callback, '@last']
+         ]);
+      }
+
+      asyncSequence2 (aStack, 'This is data!', function (aStack, message) {
+         console.log (message);
+         a.return (aStack, true);
+      });
+   }
+
+   function EXAMPLE2 (aStack) {
+
+      function someFunction (aStack) {
+         console.log (arguments [1], arguments [2]);
+         a.return (aStack, true);
+      }
+
+      function someOtherFunction (aStack) {
+         console.log (arguments [1]);
+         a.return (aStack, true);
+      }
+
+      a.call (aStack, [
+         [[someFunction, 'arg1', 'arg2']],
+         [someFunction, 'arg1', 'arg2'],
+         [
+            [someFunction, 'arg1', 'arg2'],
+            [someOtherFunction, 'arg3']
+         ],
+         [
+            [[someFunction, 'arg1', 'arg2']],
+            [[someOtherFunction, 'arg3']]
+         ]
+      ]);
+   }
+
+   function EXAMPLE3 (aStack) {
+      a.call (aStack, [
+         [function (aStack) {
+            a.return (aStack, 'Hey there!', 'message');
+         }],
+         [function (aStack) {
+            console.log (aStack.last, aStack.message);
+            a.return (aStack, true);
+         }],
+         [function (aStack) {
+            console.log (aStack.last, aStack.message);
+            a.return (aStack, true);
+         }]
+      ]);
+   }
+
+   function EXAMPLE4 (aStack) {
+
+      function async1 (aStack) {
+         console.log (arguments [1], arguments [2]);
+         a.return (aStack, true);
+      }
+
+      a.call (aStack, [
+         [function (aStack) {
+            aStack.data = 'b52';
+            a.return (aStack, true);
+         }],
+         [async1, '@data'],
+         [function (aStack) {
+            a.return (aStack, {data: 'b52', moreData: [1, 2, 3]});
+         }],
+         [async1, '@last.data', '@last.moreData.1']
+      ]);
+   }
+
    // *** INVOKING ALL THE EXAMPLES IN SEQUENCE ***
 
    a.call ([
@@ -146,6 +261,10 @@ Run the examples by either including the script in a webpage or by running `node
       [PARALLEL],
       [STOP],
       [CLEANUP],
+      [EXAMPLE1],
+      [EXAMPLE2],
+      [EXAMPLE3],
+      [EXAMPLE4],
       [function () {console.log ('All tests finished!')}]
    ]);
 

@@ -1,5 +1,5 @@
 /*
-aStack - v2.1.0
+aStack - v2.2.0
 
 Written by Federico Pereiro (fpereiro@gmail.com) and released into the public domain.
 
@@ -34,7 +34,7 @@ Please refer to readme.md to read the annotated source.
    }
 
    function e () {
-      console.log.apply (console.log, arguments);
+      console.log (arguments);
       return false;
    }
 
@@ -115,7 +115,7 @@ Please refer to readme.md to read the annotated source.
       for (var Argument in aStep) {
          if (type (aStep [Argument]) === 'string' && aStep [Argument].match (/^@.+$/)) {
             try {
-               var parameterName = aStep [Argument].match (/^@/) [0].replace (/^@/, '');
+               var parameterName = aStep [Argument].match (/^@.+/) [0].replace (/^@/, '');
                parameterName = parameterName.split ('.');
                for (var item in parameterName) {
                   if (item === '0') aStep [Argument] = aStack [parameterName [item]];
@@ -234,7 +234,11 @@ Please refer to readme.md to read the annotated source.
    }
 
    a.log = function (aStack) {
-      console.log (arguments);
+      var Arguments = [{}].concat (Array.prototype.slice.call (arguments, 1));
+      for (var key in aStack) {
+         if (key !== 'aPath') Arguments [0] [key] = aStack [key];
+      }
+      console.log (Arguments);
       return a.return (aStack, aStack.last);
    }
 

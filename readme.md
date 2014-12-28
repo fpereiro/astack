@@ -651,7 +651,7 @@ To inspect the contents of the `aStack`, place an `aStep` calling `a.log` just b
 
 ## Source code
 
-The complete source code is contained in `astack.js`. It is about 240 lines long.
+The complete source code is contained in `astack.js`. It is about 250 lines long.
 
 Below is the annotated source.
 
@@ -1415,17 +1415,34 @@ We invoke `a.cond`, passing the `aStack`, `next` wrapped into an array (which ma
 
 `a.log` is a function for logging the data in the `aStack` at any given moment, plus other arguments that you pass to it. It does two things:
 
+- Log its arguments, with the exception of `aStack.aPath`.
+- `return` the same value that was in `aStack.last`.
+
 ```javascript
    a.log = function (aStack) {
 ```
 
-- Log its arguments:
+We create a local variable `Arguments` where we'll store a copy of `arguments`. Notice that we place an empty object instead of `aStack` as its first element.
 
 ```javascript
-      console.log (arguments);
+      var Arguments = [{}].concat (Array.prototype.slice.call (arguments, 1));
 ```
 
-- `return` the same value that was in `aStack.last`, so that its value remains unaltered.
+We copy every key of the `aStack` into the first element of `Arguments`, except for `aPath`.
+
+```javascript
+      for (var key in aStack) {
+         if (key !== 'aPath') Arguments [0] [key] = aStack [key];
+      }
+```
+
+We log `Arguments`.
+
+```javascript
+      console.log (Arguments);
+```
+
+We `a.return` `aStack.last` using the `aStack`.
 
 ```javascript
       return a.return (aStack, aStack.last);

@@ -550,16 +550,17 @@ a.call ([
 *Stack parameters* are a shorthand that allow you to reference return values in the `aStack` from within an `aStep`. Let's go back to an example we saw above:
 
 ```javascript
-function asyncSequence (aStack, data) {
+function asyncSequence (aStack, data, callback) {
    a.call (aStack, [
       [async1, data],
       [async2, '@last'],
-      [async3, '@last']
+      [async3, '@last'],
+      [callback, '@last']
    ]);
 }
 ```
 
-When `a.call` executes `async2`, it will replace `'@last'` with the current value of `aStack.last` (which is the value `a.return`ed by `async1`).
+When `a.call` executes `async2`, `async3` and `callback`, it will replace `'@last'` with the value of `aStack.last` at the moment that each asynchronous call is made.
 
 Stack parameters allow you to refer statically (through a string) to a variable whose value you won't know until the required async functions are executed. If it wasn't for them, you'd have to either hardwire the logic into the async function (for example, make it read `aStack.last`) or wrap a generic function with a specific lambda function that passes `aStack.last` to the former.
 
@@ -657,7 +658,7 @@ Below is the annotated source.
 
 ```javascript
 /*
-aStack - v2.2.1
+aStack - v2.2.2
 
 Written by Federico Pereiro (fpereiro@gmail.com) and released into the public domain.
 
@@ -1240,7 +1241,7 @@ The last thing to do is to invoke `a.call`, passing it the modified `aCond` and 
 
 ### Parallel execution
 
-`a.cond` is the function that provides parallel asynchronous execution. It is variadic, so we'll determine its arguments below.
+`a.fork` is the function that provides parallel asynchronous execution. It is variadic, so we'll determine its arguments below.
 
 ```javascript
    a.fork = function () {

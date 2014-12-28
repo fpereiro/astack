@@ -139,6 +139,7 @@ Run the examples by either including the script in a webpage or by running `node
    }
 
    function EXAMPLE1 (aStack) {
+      console.log ('Starting EXAMPLE1.');
 
       function async1 (data, callback) {
          callback (data);
@@ -162,7 +163,7 @@ Run the examples by either including the script in a webpage or by running `node
          });
       }
 
-      asyncSequence1 ('This is data!', console.log);
+      asyncSequence1 ('This is data!', function (data) {console.log (data)});
 
       function async4 (aStack, data) {
          a.return (aStack, data);
@@ -192,6 +193,7 @@ Run the examples by either including the script in a webpage or by running `node
    }
 
    function EXAMPLE2 (aStack) {
+      console.log ('Starting EXAMPLE2.');
 
       function someFunction (aStack) {
          console.log (arguments [1], arguments [2]);
@@ -218,6 +220,7 @@ Run the examples by either including the script in a webpage or by running `node
    }
 
    function EXAMPLE3 (aStack) {
+      console.log ('Starting EXAMPLE3.');
       a.call (aStack, [
          [function (aStack) {
             a.return (aStack, 'Hey there!', 'message');
@@ -234,6 +237,7 @@ Run the examples by either including the script in a webpage or by running `node
    }
 
    function EXAMPLE4 (aStack) {
+      console.log ('Starting EXAMPLE4.');
 
       function async1 (aStack) {
          console.log (arguments [1], arguments [2]);

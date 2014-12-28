@@ -657,7 +657,7 @@ Below is the annotated source.
 
 ```javascript
 /*
-aStack - v2.2.0
+aStack - v2.2.1
 
 Written by Federico Pereiro (fpereiro@gmail.com) and released into the public domain.
 
@@ -1036,7 +1036,7 @@ Since stack parameters support dot notation (to access properties of nested arra
 We create a local variable `parameterName` where place the stack parameter name, which is the argument itself minus the `@` sign. For example, if the argument is `'@last'`, `parameterName` will be `last`.
 
 ```javascript
-               var parameterName = aStep [Argument].match (/^@/) [0].replace (/^@/, '');
+               var parameterName = aStep [Argument].match (/^@.+/) [0].replace (/^@/, '');
 ```
 
 We split `parameterName` into an array, using the dots as separators. If, for example, `parameterName` is `'last.data'`, it will now be `['last', 'data']`.

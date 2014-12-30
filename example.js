@@ -1,5 +1,5 @@
 /*
-aStack - v2.2.2
+aStack - v2.2.3
 
 Written by Federico Pereiro (fpereiro@gmail.com) and released into the public domain.
 

@@ -1,5 +1,5 @@
 /*
-aStack - v2.2.2
+aStack - v2.2.3
 
 Written by Federico Pereiro (fpereiro@gmail.com) and released into the public domain.
 
@@ -27,6 +27,7 @@ Please refer to readme.md to read the annotated source.
       }
       if (type === 'object') {
          if (value === null)                                               type = 'null';
+         if (Object.prototype.toString.call (value) === '[object Date]')   type = 'date';
          if (Object.prototype.toString.call (value) === '[object Array]')  type = 'array';
          if (Object.prototype.toString.call (value) === '[object RegExp]') type = 'regex';
       }

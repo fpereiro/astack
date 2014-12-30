@@ -658,7 +658,7 @@ Below is the annotated source.
 
 ```javascript
 /*
-aStack - v2.2.2
+aStack - v2.2.3
 
 Written by Federico Pereiro (fpereiro@gmail.com) and released into the public domain.
 
@@ -693,10 +693,10 @@ The `type` function below is <del>copypasted</del> taken from [teishi](https://g
 
 The purpose of `type` is to create an improved version of `typeof`. The improvements are two:
 
-- Distinguish between `object`, `array`, `regex` and `null` (all of which return `object` in `typeof`).
+- Distinguish between `object`, `array`, `regex`, `date` and `null` (all of which return `object` in `typeof`).
 - Distinguish between types of numbers: `nan`, `infinity`, `integer` and `float` (all of which return `number` in `typeof`).
 
-`type` takes a single argument (of any type, naturally) and returns a string which can be any of: `nan`, `infinity`, `integer`, `float`, `array`, `object`, `function`, `string`, `regex`, `null` and `undefined`.
+`type` takes a single argument (of any type, naturally) and returns a string which can be any of: `nan`, `infinity`, `integer`, `float`, `array`, `object`, `function`, `string`, `regex`, `date`, `null` and `undefined`.
 
 ```javascript
    function type (value) {
@@ -709,6 +709,7 @@ The purpose of `type` is to create an improved version of `typeof`. The improvem
       }
       if (type === 'object') {
          if (value === null)                                               type = 'null';
+         if (Object.prototype.toString.call (value) === '[object Date]')   type = 'date';
          if (Object.prototype.toString.call (value) === '[object Array]')  type = 'array';
          if (Object.prototype.toString.call (value) === '[object RegExp]') type = 'regex';
       }

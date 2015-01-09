@@ -1,5 +1,5 @@
 /*
-aStack - v2.2.3
+aStack - v2.3.0
 
 Written by Federico Pereiro (fpereiro@gmail.com) and released into the public domain.
 
@@ -180,9 +180,9 @@ Run the examples by either including the script in a webpage or by running `node
       function asyncSequence2 (aStack, data, callback) {
          a.call (aStack, [
             [async4, data],
-            [async5, '@last'],
-            [async6, '@last'],
-            [callback, '@last']
+            [async5],
+            [async6],
+            [callback]
          ]);
       }
 
@@ -194,6 +194,19 @@ Run the examples by either including the script in a webpage or by running `node
 
    function EXAMPLE2 (aStack) {
       console.log ('Starting EXAMPLE2.');
+      function async1 (aStack, data) {
+         a.return (aStack, data);
+      }
+
+      a.call (aStack, [
+         [async1, 'hey'],
+         [async1],
+         [a.log]
+      ]);
+   }
+
+   function EXAMPLE3 (aStack) {
+      console.log ('Starting EXAMPLE3.');
 
       function someFunction (aStack) {
          console.log (arguments [1], arguments [2]);
@@ -219,8 +232,8 @@ Run the examples by either including the script in a webpage or by running `node
       ]);
    }
 
-   function EXAMPLE3 (aStack) {
-      console.log ('Starting EXAMPLE3.');
+   function EXAMPLE4 (aStack) {
+      console.log ('Starting EXAMPLE4.');
       a.call (aStack, [
          [function (aStack) {
             a.return (aStack, 'Hey there!', 'message');
@@ -231,13 +244,14 @@ Run the examples by either including the script in a webpage or by running `node
          }],
          [function (aStack) {
             console.log (aStack.last, aStack.message);
+            delete aStack.message;
             a.return (aStack, true);
          }]
       ]);
    }
 
-   function EXAMPLE4 (aStack) {
-      console.log ('Starting EXAMPLE4.');
+   function EXAMPLE5 (aStack) {
+      console.log ('Starting EXAMPLE5.');
 
       function async1 (aStack) {
          console.log (arguments [1], arguments [2]);
@@ -249,11 +263,78 @@ Run the examples by either including the script in a webpage or by running `node
             aStack.data = 'b52';
             a.return (aStack, true);
          }],
-         [async1, '@data'],
+         [async1, '@data', '@last'],
          [function (aStack) {
             a.return (aStack, {data: 'b52', moreData: [1, 2, 3]});
          }],
-         [async1, '@last.data', '@last.moreData.1']
+         [async1, '@last.data', '@last.moreData.1'],
+         [function (aStack) {delete aStack.data; a.return (aStack, true)}]
+      ]);
+   }
+
+   function EXAMPLE6 (aStack) {
+      console.log ('Starting EXAMPLE6.');
+
+      a.call (aStack, [
+         [a.fork, {
+            'count0': [writeAndIncrement, 'count0.txt'],
+            'count1': [writeAndIncrement, 'count1.txt'],
+            'count2': [writeAndIncrement, 'count2.txt']
+         }],
+         [function (aStack) {
+            console.log ('a.fork operation ready. Result was', aStack.last);
+            a.return (aStack, true);
+         }],
+         [CLEANUP]
+      ]);
+   }
+
+   function EXAMPLE7 (aStack) {
+      console.log ('Starting EXAMPLE7.');
+
+      function async1 (aStack) {
+         a.return (aStack, true);
+      }
+
+      a.call (aStack, [
+         [a.fork, [
+            [async1],
+            [async1],
+            [async1]
+         ]],
+         [a.log],
+         [a.fork, {
+            first: [async1],
+            second: [async1],
+            third: [async1]
+         }],
+         [a.log],
+      ]);
+   }
+
+   function EXAMPLE8 (aStack) {
+      console.log ('Starting EXAMPLE8.');
+
+      // http://stackoverflow.com/a/19323120
+      aStack.circular = [];
+      aStack.circular [0] = aStack.circular;
+
+      aStack.data = [];
+
+      function inner (aStack) {
+         var random = Math.random ();
+         console.log ('Pushing', random, 'to aStack.data');
+         aStack.data.push (random);
+         a.return (aStack, true);
+      }
+
+      a.call (aStack, [
+         [a.fork, [
+            [inner],
+            [inner],
+            [inner]
+         ]],
+         [a.log]
       ]);
    }
 
@@ -269,6 +350,10 @@ Run the examples by either including the script in a webpage or by running `node
       [EXAMPLE2],
       [EXAMPLE3],
       [EXAMPLE4],
+      [EXAMPLE5],
+      [EXAMPLE6],
+      [EXAMPLE7],
+      [EXAMPLE8],
       [function () {console.log ('All tests finished!')}]
    ]);
 

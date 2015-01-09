@@ -96,7 +96,7 @@ This script prints the following:
 ```
 Current value of count.txt is 0
 Current value of count.txt is 1
-There was an error when writing to the file undefined so no incrementing will take place.
+There was an error when writing to the file true so no incrementing will take place.
 ```
 
 ### Parallel execution
@@ -300,9 +300,9 @@ function async1 (aStack, data) {
 function asyncSequence (aStack, data, callback) {
    a.call (aStack, [
       [async1, data],
-      [async2, '@last'],
-      [async3, '@last'],
-      [callback, '@last']
+      [async2],
+      [async3],
+      [callback]
    ]);
 }
 ```
@@ -344,12 +344,14 @@ The `aPath` is an array containing zero or more `aStep`s. An `aPath` is, in fact
 
 #### `aStack`
 
-The `aStack` is the argument that asynchronous functions will pass around instead of callbacks. It is an object that contains two things:
+The `aStack` is the argument that asynchronous functions will pass around instead of callbacks. It is an object that contains two keys:
 
-1. An `aPath`.
-2. `last`, which is the value returned by the last asynchronous function executed.
+1. `aPath`.
+2. `last`, which contains the value returned by the last asynchronous function executed.
 
-```
+A generic `aStack` looks like this:
+
+```javascript
 aStack = {
    aPath: [aStep, aStep, ...],
    last: ...
@@ -440,7 +442,7 @@ In short:
 - An `aStack` (optional).
 - An `aPath` or `aStep`.
 
-`a.call` essentially receives two `aPath`s: the one in `aStack.aPath`, which we'll name *old aPath*, and the `aPath`/`aStep` it receives as its last argument, which we'll name *new aPath*.
+`a.call` receives two `aPath`s: the one in `aStack.aPath`, which we'll name *old aPath*, and the `aPath`/`aStep` it receives as its last argument, which we'll name *new aPath*.
 
 `a.call` does two main things:
 - Takes the old and new `aPath`s and  prepends the new one to the old one to form a single `aPath`.
@@ -509,6 +511,40 @@ function async (aStack, arg1) {
 }
 ```
 
+If an `aStep` only has an `aFunction` and no other arguments, by default, `a.call` will pass `aStack.last` as the second argument to the function. Let's see an example of this:
+
+```javascript
+function async1 (aStack, data) {
+   a.return (aStack, data);
+}
+
+a.call ([
+   [async1, 'hey'],
+   [async1]
+]);
+```
+
+The first `aStep`, `[async1, 'hey']`, invokes `async1`, passing  `'hey'` as the second argument. `async1` then `a.return`s `'hey'`. The second `aStep` has no explicit arguments, so `a.call` will put `aStack.last` as its second argument. As a result, the second `aStep` behaves exactly like the first.
+
+Another example of this is in the `asyncSequence` example above. Let's repeat it here:
+
+```javascript
+function asyncSequence (aStack, data, callback) {
+   a.call (aStack, [
+      [async1, data],
+      [async2],
+      [async3],
+      [callback]
+   ]);
+}
+```
+
+`async2` and `async3` receive whatever was `a.return`ed by `async1`, instead of receiving `undefined`.
+
+The reason for inserting `aStack.last` in `aStep`s without arguments is that **most `aStep`s without arguments are lambda functions written in place to do some operation based on `aStack.last`**.
+
+If you need `aStack.last` in a function that receives explicit parameters, please refer to the description of [stack parameters](https://github.com/fpereiro/astack/stack-parameters) below.
+
 ### `a.return`
 
 `a.return` takes two arguments:
@@ -525,7 +561,7 @@ Notice that `a.return` is an `aFunction`, and as such, the last thing that it do
 
 `a.return` can take an optional third argument, named `copy`, which should be a string. A copy of the return value will be stored in the aStack, under the key named as the `copy` argument. For example, if you write `a.return (aStack, true, 'someKey')`, the next `aFunction` executed will receive an `aStack` where `aStack.someKey === true`.
 
-`copy` is useful when you want to preserve an `a.return`ed value for more than one `aStep`. Since every `aStep` overwrites aStack.last, when you need to preserve states along a chain of `aStep`s, just use this argument. Caution must be taken not to overuse this resource, since it's comparable to setting a global variable within the `aStack` - and hence, you rely on other functions you call in the middle not to modify it and not to be disturbed by it in any way.
+`copy` is useful when you want to preserve an `a.return`ed value for more than one `aStep`. Since every `aStep` overwrites `aStack.last`, when you need to preserve states along a chain of `aStep`s, just use this argument. Caution must be taken not to overuse this resource, since it's comparable to setting a global variable within the `aStack` - and hence, you rely on other functions you call in the middle not to modify it and not to be disturbed by it in any way.
 
 Let's see this in an example:
 
@@ -547,20 +583,7 @@ a.call ([
 
 ### Stack parameters
 
-*Stack parameters* are a shorthand that allow you to reference return values in the `aStack` from within an `aStep`. Let's go back to an example we saw above:
-
-```javascript
-function asyncSequence (aStack, data, callback) {
-   a.call (aStack, [
-      [async1, data],
-      [async2, '@last'],
-      [async3, '@last'],
-      [callback, '@last']
-   ]);
-}
-```
-
-When `a.call` executes `async2`, `async3` and `callback`, it will replace `'@last'` with the value of `aStack.last` at the moment that each asynchronous call is made.
+*Stack parameters* are a shorthand that allow you to reference return values in the `aStack` from within an `aStep`.
 
 Stack parameters allow you to refer statically (through a string) to a variable whose value you won't know until the required async functions are executed. If it wasn't for them, you'd have to either hardwire the logic into the async function (for example, make it read `aStack.last`) or wrap a generic function with a specific lambda function that passes `aStack.last` to the former.
 
@@ -572,11 +595,11 @@ a.call ([
       aStack.data = 'b52';
       a.return (aStack, true);
    }],
-   [async1, '@data']
+   [async1, '@data', '@last']
 ]);
 ```
 
-When `async1` is invoked, `'@data'` will be replaced by the string `'b52'`.
+When `async1` is invoked, it will receive `'b52'` as its second argument and `true` as its third argument.
 
 Stack parameters support dot notation so that you can access elements in arrays and objects.
 
@@ -589,9 +612,9 @@ a.call ([
 ]);
 ```
 
-`async1` will be invoked with `'b52'` as its second argument and with `2` as its third argument.
+When `async1` is invoked, it will receive `'b52'` as its second argument and `2` as its third argument.
 
-Notice that you cannot use dots as part of the name of a stack parameter, because it will be interpreted as access to a subelement.
+Notice that you cannot use dots as part of the name of a stack parameter, because any dot will be interpreted as access to a subelement.
 
 If there's an exception generated by the dot notation (because you are trying to access a subelement of something that's neither an array nor an object, or a subelement with a stringified key from an array instead of an object), the stack parameter will be replaced by `undefined`.
 
@@ -622,17 +645,63 @@ If neither `X` nor `default` are defined, `aCond` `a.return`s `false`.
 
 `a.cond` takes three arguments:
 - An `aStack` (optional). If you omit it, `a.fork` will create a new one.
-- An `aStep`/`aPath`.
+- An `aStep`/`aPath`, or an object where every key is an `aStep`/`aPath`.
 
-`a.fork` executes every `aStep` within the `aPath` in parallel, generating n simultaneous calls to `a.call`. As these calls finish, their results are stored in an array held by `a.fork`. This array has a one-to-one correspondence with the `aPath` passed to `fork`, in that the first result matches the first `aStep`, the second result matches the second `aStep`, and so on.
+`a.fork` executes every `aStep` within the `aPath` in parallel, generating n simultaneous calls to `a.call`. As these calls finish, their results are stored in an output object held by `a.fork`. The output object will be an array or an object, depending on whether you invoked `a.fork` with an `aStep`/`aPath` or with an object containing `aStep`s/`aPath`s.
 
-When the last action is executed, the results array is `a.return`ed.
+```javascript
+function async1 (aStack) {
+   a.return (aStack, true);
+}
+
+a.fork ([
+   [async1],
+   [async1],
+   [async1]
+]);
+
+a.fork ({
+   first: [async1],
+   second: [async1],
+   third: [async1]
+]);
+```
+
+In the example above, the first invocation to `a.fork` will `a.return` `[true, true, true]`, while the second one will `a.return` `{first: true, second: true, third: true}`.
+
+The array/object `a.return`ed by `a.fork` has a one-to-one correspondence with the array/object passed to `a.fork`.
 
 If you pass an empty `aPath`, `a.fork` will just return an empty array, and if you pass it a single `aStep`, it will return an array containing the result of `a.call`ing that `aStep`.
 
-When executing `a.fork`, don't place in the `aStack` any object that cannot be copied in a straightforward way. This includes either circular objects or objects with special properties (such as an HTTP request).
+When `a.fork` executes parallel `aPath`s, it will create copies of the `aStack` that are local to them. The idea behind this is to avoid side effects between parallel asynchronous calls. However, you should bear in mind two caveats:
 
-This limitation is because we need to create a copy the `aStack` for each execution branch. Copying circular structures complicates the code, and copying complex structures such as HTTP requests is, to the best of my knowledge, not possible. If you are using these kinds of objects, don't pass them into the `aStack` when you are invoking `a.fork`.
+- Some objects, however, like circular structures or HTTP connections cannot be copied (or at least not easily), so if any of the parallel threads changes these special objects, the change will be visible to other parallel threads.
+- If any of the parallel threads sets a key in its `aStack` that's neither `aPath` or `last`, that key will still be set after `a.fork` is done. If more than one parallel thread sets that key, the thread that sets it last (in real time, not by its order in the `aPath`) will overwrite the key set by the other thread.
+
+
+```javascript
+function (aStack) {
+
+   aStack.data = [];
+
+   function inner (aStack) {
+      aStack.data.push (Math.random ());
+      a.return (aStack, true);
+   }
+
+   a.fork (aStack, [
+      [inner],
+      [inner],
+      [inner]
+   ]);
+}
+```
+
+After the call to `a.fork` above, the `aStack` will look something like:
+
+`{last: [true, true, true], data: [0.6843374725431204]}`
+
+Because the `aStack` is copied for each `aPath`, `aStack.data` will have just one element (the last one set) instead of three.
 
 ### `stop`
 
@@ -652,13 +721,13 @@ To inspect the contents of the `aStack`, place an `aStep` calling `a.log` just b
 
 ## Source code
 
-The complete source code is contained in `astack.js`. It is about 250 lines long.
+The complete source code is contained in `astack.js`. It is about 270 lines long.
 
 Below is the annotated source.
 
 ```javascript
 /*
-aStack - v2.2.3
+aStack - v2.3.0
 
 Written by Federico Pereiro (fpereiro@gmail.com) and released into the public domain.
 
@@ -728,12 +797,14 @@ We define a function `e` for performing two functions:
    }
 ```
 
-`teishi.c` copies a complex value (an array or an object). It will produce a new output that is equal to the input.
+`copy` copies a complex value (an array or an object). It will produce a new output that is equal to the input. If it finds circular references, it will leave them untouched.
 
-`copy` takes an `input`, which is the element that will be copied.
+The "public" interface of the function (if we allow that distinction) takes a single argument, the `input` we want to copy. However, we define a second "private" argument (`seen`) that the function will use to pass information to recursive calls.
+
+This function is recursive. On recursive calls, `input` won't represent the `input` that the user passed to the function, but rather one of the elements that are contained within the original `input`.
 
 ```javascript
-   function copy (input) {
+   function copy (input, seen) {
 ```
 
 If `input` is not a complex object, we return it.
@@ -748,18 +819,79 @@ If we are here, `input` is a complex object. We initialize `output` to either an
       var output = type (input) === 'array' ? [] : {};
 ```
 
-We iterate the elements of `input`.
+```javascript
+We create a new array `Seen`, to store all references to complex objects.
+
+```javascript
+      var Seen = [];
+```
+
+If the `seen` argument received above is not `undefined`, this means that the current call to `copy` was done recursively by `copy` itself. If this is the case, `seen` contains a list of *already seen* objects and arrays. If this is the case, we copy each of the references into `Seen`, a new array.
+
+```javascript
+      if (seen !== undefined) {
+         for (var i in seen) Seen [i] = seen [i];
+      }
+```
+
+`seen` is where we store the information needed to detect circular references. For any given `input`, `seen` will contain a reference to all arrays and objects that *contain* the current input. For example, if you have an array `a` (the outermost element) which contains an object `b`, and that object `b` contains an array `c`, these will be the values of `seen`:
+
+`When processing a: []`
+
+`When processing b: [a]`
+
+`When processing c: [a, b]`
+
+Now imagine that `c` contains a reference to `a`: this would be a circular reference, because `a` contains `c` and `c` contains `a`. What we want to do here is leave the reference to `a` within `c` untouched, to avoid falling into an infinite loop.
+
+On the initial (non-recursive) call to the function, `seen` will be `undefined`.
+
+If `seen` is already an array, it will be replaced by a new array with the same elements. We do this to create a *local copy* of `seen` that will only be used by the instance of the function being executed (and no other parallel recursive calls).
+
+Why do we copy `seen`? Interestingly enough, for the same reason that we write this function: arrays and objects in javascript are passed by reference. If many simultaneous recursive calls received `seen`, the modifications they will do to it will be visible to other parallel recursive calls, and we want to avoid precisely this.
+
+The detection of circular references in `copy` is best thought of as a path in a graph, from container object to contained one. For any point in the graph, we want to have the list of all containing nodes, and verify that none of them will be repeated. Any other path through the graph is what I tried to convey by *parallel recursive function call*.
+
+We now iterate the elements of `input`.
 
 ```javascript
       for (var i in input) {
 ```
 
-For each element of `input`, we assign it to the corresponding element of `output`, making a recursive invocation of `copy`. If `input [i]` is not a complex object, `copy` will return its value. If `input [i]` is complex, `copy` will return a new array or object that's a copy of `input [i]`.
-
-Notice that `copy` will loop endlessly if `input` is or contains an object or an array with circular references.
+We initalize a local variable `circular` to `false`, to track whether the object currently being iterated has already been *seen* before.
 
 ```javascript
-         output [i] = copy (input [i]);
+         var circular = false;
+```
+
+If the element is a complex object:
+
+```javascript
+         if (type (input [i]) === 'object' || type (input [i]) === 'array') {
+```
+
+We iterate `Seen`. If any of its values is equal to `input [i]`, we set `circular` to `true` and break the loop.
+
+```javascript
+            for (var j in Seen) {
+               if (Seen [j] === input [i]) {
+                  circular = true;
+                  break;
+               }
+            }
+```
+
+If the element is complex but it hasn't been *seen* before, we push it into `Seen`.
+
+```javascript
+            if (! circular) Seen.push (input [i]);
+         }
+```
+
+For each element of `input`, we assign it to the corresponding element of `output`, making a recursive invocation of `copy`. If `input [i]` is not a complex object, `copy` will return its value. If `input [i]` is complex, `copy` will return a new array or object that's a copy of `input [i]`. And if the element is a circular reference, we don't make a recursive call to `copy`.
+
+```javascript
+         output [i] = circular ? input [i] : copy (input [i], Seen);
       }
 ```
 
@@ -1015,6 +1147,12 @@ We **remove** the first element of `aStep`, which is an `aFunction`. We store it
       var aFunction = aStep.shift ();
 ```
 
+If the `aStep` has no arguments, we push `aStack.last` to it.
+
+```javascript
+      if (aStep.length === 0) aStep.push (aStack.last);
+```
+
 We now deal with stack parameters, replacing their placeholders with the actual parameters.
 
 We iterate the arguments in the `aStep`. We name the iterator `Argument` with a capital `A` because `argument` is a reserved javascript word.
@@ -1203,19 +1341,19 @@ If we're here, we know that `aCond` is a flattened `aPath`. We now want to execu
 The simplest way to do this is to push an `aStep` with a special `aFunction` into the `aCond`, which will be executed after the last asynchronous function of `aCond`.
 
 ```javascript
-      aCond.push ([function (aStack) {
+      aCond.push ([function (aStack, last) {
 ```
 
 If there's a key in `aMap` which is equivalent to `aStack.last` (the value `a.return`ed by the last `aFunction` of `aCond`), we invoke `a.call`, passing as `aPath` the corresponding branch of the `aMap`.
 
 ```javascript
-         if (aMap [aStack.last])      return a.call (aStack, aMap [aStack.last]);
+         if (aMap [last])      return a.call (aStack, aMap [last]);
 
 ```
 
 Notice how `aMap` is not passed as an explicit parameter, but rather is bound to the function because it's defined within the scope of the current invocation of `a.cond`. Such are the joys of lexical scope.
 
-Now, if `aMap [aStack.last]` is not defined but `aMap.default` is, we pass that branch to `a.call`.
+Now, if `aMap [last]` is not defined but `aMap.default` is, we pass that branch to `a.call`.
 
 ```javascript
          if (aMap ['default'])        return a.call (aStack, aMap ['default']);
@@ -1224,7 +1362,7 @@ Now, if `aMap [aStack.last]` is not defined but `aMap.default` is, we pass that 
 If neither a branch corresponding to `aStack.last` nor a `default` branch are defined in the `aMap`, we report an error message and `return` `false`.
 
 ```javascript
-         return a.return (aStack, e ('aPick received as last argument', last, 'but aMap [', last, '] is undefined and aMap.default is also undefined!', 'aMap is:', aMap));
+         return a.return (aStack, e ('The last aFunction received', last, 'as last argument', 'but aMap [', last, '] is undefined and aMap.default is also undefined!', 'aMap is:', aMap));
 ```
 
 There's nothing else to do in this `aFunction`, so we close it. We also close its containing `aStep`.
@@ -1255,75 +1393,96 @@ Like `a.call` and `a.cond` above, if the first argument is an object, we conside
       var aPath  = type (arguments [0]) !== 'object' ? arguments [0] : arguments [1];
 ```
 
-We flatten the `aPath`. If it's invalid
+We store the type of `aPath` into a local variable `aPathType`.
 
 ```javascript
-      aPath = a.flatten (aPath);
+      var aPathType = type (aPath);
 ```
 
-If `aPath` is invalid, we `return` `false`.
+If `aPath` is neither an array or an object, we `a.return` false.
 
 ```javascript
-      if (aPath === false) return a.return (aStack, false);
+      if (aPathType !== 'array' && aPathType !== 'object') return a.return (aStack, false);
 ```
 
-`a.fork` always returns an array with n values (one per each `aStep` in the `aPath` it receives). If `aPath` is empty, we return an empty array.
+We set up a local variable `iterator`, initialized to zero.
 
 ```javascript
-      if (aPath.length === 0) return a.return (aStack, []);
+      var iterator = 0;
 ```
 
-We create three local variables, which we'll use in a function below:
-- `originalStack`, which will hold a reference to the `aStack`.
-- `steps`, an integer equal to the number of `aStep`s within `aPath`.
-- `output`, an array where we'll place the results of each parallel `aStep`.
+For every key in `aPath`, we increment it. This has the effect of making `iterator` hold the number of elements of `aPath`, whether it is an object or an array.
 
 ```javascript
-      var originalStack = aStack;
-      var steps = aPath.length;
-      var output = [];
+      for (var key in aPath) {iterator++}
+```
+
+We determine a local variable `output` to be either an array or an object, depending on `aPathType`.
+
+```javascript
+      var output = aPathType === 'array' ? [] : {};
+```
+
+If `aPath` is an empty object or array, we `a.return` `output`.
+
+```javascript
+      if (iterator === 0) return a.return (aStack, output);
+```
+
+```javascript
 ```
 
 Now we get to the interesting part: we need to make parallel asynchronous calls, without any kind of race conditions, and make `a.fork` return the results (`output`) only when the slowest parallel call has `a.return`ed.
 
-To this effect, we'll define a helper function within the scope of the current call to `a.fork`. This function, `collect`, will take two arguments: an `aStack` (because it's an `aFunction`) and an `index`, which is a number.
+To this effect, we'll define a helper function within the scope of the current call to `a.fork`. This function, `collect`, will take two arguments: an `aStack` (because it's an `aFunction`) and a `key`.
 
 `collect` is the `aFunction` that will be called *after* each `aStep` run in parallel, and to which we'll task to *collect* the results of each parallel `aStep`.
 
 ```javascript
-      function collect (aStack, index) {
+      function collect (stack, key) {
 ```
 
-The first thing that this function does is to set `output [index]` to the value `return`ed by the last asynchronous function. This value will have been `return`ed by the `aStep` at position `index` in the `aPath` array.
+Notice that the `aStack` passed to `collect` is named `stack`, so that `collect` can also refer to the original `aStack`.
+
+The first thing that this function does is to set `output [key]` to the value `return`ed by the last asynchronous function. This value will have been `return`ed by the `aStep` at position `key` of the `aPath`. Notice this will work for both an array and an object.
 
 ```javascript
-         output [index] = aStack.last;
+         output [key] = stack.last;
 ```
 
-Notice that `output` is the array we created a few lines above. By defining `collect` within each call to `a.fork`, we allow each parallel execution thread to have a reference common to all of them, which allows all of them to behave as a unit. The same happens with the other two variables, `originalStack` and `steps`.
+Notice that `output` is the array we created a few lines above. By defining `collect` within each call to `a.fork`, we allow each parallel execution thread to have a reference common to all of them, which allows all of them to behave as a unit. The same happens with `iterator`, as we will see below.
 
-If in the `aStack` there are any keys that are neither `aPath` nor `last` (that is, other stack parameters), we place them in `originalStack`, which is the `aStack` that `a.fork` received. If there's any overlap within stack parameters from different parallel `aStep`s, the last `aStep` to `a.return` will prevail. For example, if `aPath [4]` sets `aStack.data` and `aPath [2]` sets `aStack.data` too, if `aPath [2]` `a.return`s later than `aPath [4]`, it will overwrite the value of `aStack.data` set by `aPath [4]`.
+If in the `stack` there are any keys that are neither `aPath` nor `last` (that is, other stack parameters), we place them in the original `aStack`, which is the `aStack` that `a.fork` received. If there's any overlap within stack parameters from different parallel `aStep`s, the last `aStep` to `a.return` will prevail. For example, if `aPath [4]` sets `aStack.data` and `aPath [2]` sets `aStack.data` too, if `aPath [2]` `a.return`s later than `aPath [4]`, it will overwrite the value of `aStack.data` set by `aPath [4]`.
 
 ```javascript
-         for (var key in aStack) {
-            if (key !== 'aPath' && key !== 'last') originalStack [key] = aStack [key];
+         for (var key in stack) {
+            if (key !== 'aPath' && key !== 'last') aStack [key] = stack [key];
          }
 ```
 
-We decrement `steps`, since if we're invoking `collect`, it's because one of the `aStep`s just `a.return`ed.
+We decrement `iterator`, since if we're invoking `collect`, it's because one of the `aStep`s just `a.return`ed.
 
 ```javascript
-         steps--;
+         iterator--;
 ```
 
-Now, if `steps` is equal to zero, the current call to `collect` is taking place after the slowest parallel `aStep` finished executing. Thus, this invocation of `collect` is in charge of actually `a.return`ing the `output` to the `originalStack`.
+Now, if `steps` is equal to zero, the current call to `collect` is taking place after the slowest parallel `aStep` finished executing. Thus, this invocation of `collect` is in charge of actually `a.return`ing the `output` to the original `aStack`.
 
 ```javascript
-         if (steps === 0) return a.return (originalStack, output);
+         if (iterator === 0) return a.return (aStack, output);
       }
 ```
 
 Notice that `collect` is an exceptional `aFunction`, in that not always finishes by making a call to another `aFunction` - it only does it when a certain condition is met. However, this condition will be met exactly once - when the last `aStep` finished its execution. `collect and `a.fork`, together, behave like a proper `aFunction`.
+
+We now create a copy of the `aStack` and store it in a local variable `stack`. We then reset its `aPath` to an empty array.
+
+```javascript
+      var stack = copy (aStack);
+      stack.aPath = [];
+```
+
+The purpose of `stack` is to have a clean copy of the `aStack` that is not the `aStack` itself. The reason for this is extremely abstruse, but since you're reading this, we might as well explain it. Remember above when `collect` iterated through special keys (i.e.: neither `last` nor `aPath`) of its `aStack` and placed them into the original `aStack`? Well, any of these changes will be visible to parallel calls that are executed later. By making a copy of the original `aStack`, we preserve the original `aStack` as it was before any of the parallel calls starts executing.
 
 We now iterate each of the `aStep`s in the `aPath`.
 
@@ -1331,17 +1490,15 @@ We now iterate each of the `aStep`s in the `aPath`.
       for (var k in aPath) {
 ```
 
-We copy the `aStack` into a local variable `newStack`. We then reset its `aPath` to an empty array.
+We invoke `a.call` passing as its `aStack` a **copy** of `stack`. This copy will be unique to the particular parallel thread we are initializing.
 
 ```javascript
-         var newStack = copy (aStack);
-         newStack.aPath = [];
+         a.call (copy (stack), [
 ```
 
-Using this newly created `aStack`, we invoke `a.call`, passing to it each `aStep`, followed by an `aStep` containing `collect` and the index.
+Using this newly created `aStack`, we invoke `a.call`, passing to it each `aStep`, followed by an `aStep` containing `collect` and the key.
 
 ```javascript
-         a.call (newStack, [
             aPath [k],
             [collect, k]
          ]);

@@ -1,5 +1,5 @@
 /*
-aStack - v2.2.3
+aStack - v2.3.0
 
 Written by Federico Pereiro (fpereiro@gmail.com) and released into the public domain.
 
@@ -39,14 +39,29 @@ Please refer to readme.md to read the annotated source.
       return false;
    }
 
-   function copy (input) {
+   function copy (input, seen) {
 
       if (type (input) !== 'object' && type (input) !== 'array') return input;
 
       var output = type (input) === 'array' ? [] : {};
 
+      var Seen = [];
+      if (seen !== undefined) {
+         for (var i in seen) Seen [i] = seen [i];
+      }
+
       for (var i in input) {
-         output [i] = copy (input [i]);
+         var circular = false;
+         if (type (input [i]) === 'object' || type (input [i]) === 'array') {
+            for (var j in Seen) {
+               if (Seen [j] === input [i]) {
+                  circular = true;
+                  break;
+               }
+            }
+            if (! circular) Seen.push (input [i]);
+         }
+         output [i] = circular ? input [i] : copy (input [i], Seen);
       }
 
       return output;
@@ -113,6 +128,8 @@ Please refer to readme.md to read the annotated source.
 
       var aFunction = aStep.shift ();
 
+      if (aStep.length === 0) aStep.push (aStack.last);
+
       for (var Argument in aStep) {
          if (type (aStep [Argument]) === 'string' && aStep [Argument].match (/^@.+$/)) {
             try {
@@ -164,10 +181,10 @@ Please refer to readme.md to read the annotated source.
          if (aCond === false) return a.return (aStack, false);
       }
 
-      aCond.push ([function (aStack) {
-         if (aMap [aStack.last])      return a.call (aStack, aMap [aStack.last]);
+      aCond.push ([function (aStack, last) {
+         if (aMap [last])      return a.call (aStack, aMap [last]);
          if (aMap ['default'])        return a.call (aStack, aMap ['default']);
-         return a.return (aStack, e ('aPick received as last argument', last, 'but aMap [', last, '] is undefined and aMap.default is also undefined!', 'aMap is:', aMap));
+         return a.return (aStack, e ('The last aFunction received', last, 'as last argument', 'but aMap [', last, '] is undefined and aMap.default is also undefined!', 'aMap is:', aMap));
       }]);
 
       return a.call (aStack, aCond, true);
@@ -180,30 +197,32 @@ Please refer to readme.md to read the annotated source.
       var aStack = type (arguments [0]) !== 'object' ? a.create ()   : arguments [0];
       var aPath  = type (arguments [0]) !== 'object' ? arguments [0] : arguments [1];
 
-      aPath = a.flatten (aPath);
+      var aPathType = type (aPath);
 
-      if (aPath === false) return a.return (aStack, false);
+      if (aPathType !== 'array' && aPathType !== 'object') return a.return (aStack, false);
 
-      if (aPath.length === 0) return a.return (aStack, []);
+      var iterator = 0;
 
-      var originalStack = aStack;
-      var steps = aPath.length;
-      var output = [];
+      for (var key in aPath) {iterator++}
 
-      function collect (aStack, index) {
-         output [index] = aStack.last;
-         for (var key in aStack) {
-            if (key !== 'aPath' && key !== 'last') originalStack [key] = aStack [key];
+      var output = aPathType === 'array' ? [] : {};
+
+      if (iterator === 0) return a.return (aStack, output);
+
+      function collect (stack, key) {
+         output [key] = stack.last;
+         for (var key in stack) {
+            if (key !== 'aPath' && key !== 'last') aStack [key] = stack [key];
          }
-         steps--;
-         if (steps === 0) return a.return (originalStack, output);
+         iterator--;
+         if (iterator === 0) return a.return (aStack, output);
       }
 
-      for (var k in aPath) {
-         var newStack = copy (aStack);
-         newStack.aPath = [];
+      var stack = copy (aStack);
+      stack.aPath = [];
 
-         a.call (newStack, [
+      for (var k in aPath) {
+         a.call (copy (stack), [
             aPath [k],
             [collect, k]
          ]);

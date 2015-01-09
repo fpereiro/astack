@@ -543,7 +543,7 @@ function asyncSequence (aStack, data, callback) {
 
 The reason for inserting `aStack.last` in `aStep`s without arguments is that **most `aStep`s without arguments are lambda functions written in place to do some operation based on `aStack.last`**.
 
-If you need `aStack.last` in a function that receives explicit parameters, please refer to the description of [stack parameters](https://github.com/fpereiro/astack/stack-parameters) below.
+If you need `aStack.last` in a function that receives explicit parameters, please refer to the description of [stack parameters](https://github.com/fpereiro/astack#stack-parameters) below.
 
 ### `a.return`
 

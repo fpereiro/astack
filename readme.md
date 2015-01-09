@@ -819,7 +819,6 @@ If we are here, `input` is a complex object. We initialize `output` to either an
       var output = type (input) === 'array' ? [] : {};
 ```
 
-```javascript
 We create a new array `Seen`, to store all references to complex objects.
 
 ```javascript

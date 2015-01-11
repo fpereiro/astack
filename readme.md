@@ -643,7 +643,7 @@ If neither `X` nor `default` are defined, `aCond` `a.return`s `false`.
 
 `a.fork` is a function that is useful for asynchronous *parallel* execution. You can see it in action in the [parallel execution example above](https://github.com/fpereiro/astack#parallel-execution).
 
-`a.cond` takes three arguments:
+`a.fork` takes three arguments:
 - An `aStack` (optional). If you omit it, `a.fork` will create a new one.
 - An `aStep`/`aPath`, or an object where every key is an `aStep`/`aPath`.
 
@@ -677,7 +677,6 @@ When `a.fork` executes parallel `aPath`s, it will create copies of the `aStack` 
 
 - Some objects, however, like circular structures or HTTP connections cannot be copied (or at least not easily), so if any of the parallel threads changes these special objects, the change will be visible to other parallel threads.
 - If any of the parallel threads sets a key in its `aStack` that's neither `aPath` or `last`, that key will still be set after `a.fork` is done. If more than one parallel thread sets that key, the thread that sets it last (in real time, not by its order in the `aPath`) will overwrite the key set by the other thread.
-
 
 ```javascript
 function (aStack) {
@@ -727,7 +726,7 @@ Below is the annotated source.
 
 ```javascript
 /*
-aStack - v2.3.0
+aStack - v2.3.1
 
 Written by Federico Pereiro (fpereiro@gmail.com) and released into the public domain.
 
@@ -1385,11 +1384,11 @@ The last thing to do is to invoke `a.call`, passing it the modified `aCond` and 
    a.fork = function () {
 ```
 
-Like `a.call` and `a.cond` above, if the first argument is an object, we consider it to be the `aStack`, otherwise we create it. The `aPath` will be either the first argument or the second, depending on whether or not an `aStack` was passed.
+Like `a.call` and `a.cond` above, `a.fork` can be invoked with or without an `aStack`. To determine whether an `aStack` was passed or not, we measure the number of arguments. If only one is passed, we assume this element to be the `aPath`, otherwise we consider the first to be the `aStack` and the second one to be the `aPath`. Argument detection is done differently from other functions in the library because a) the `aPath` can also be an object containing `aPath`s/`aStep`s; and b) there's no `external` argument in `a.fork`.
 
 ```javascript
-      var aStack = type (arguments [0]) !== 'object' ? a.create ()   : arguments [0];
-      var aPath  = type (arguments [0]) !== 'object' ? arguments [0] : arguments [1];
+      var aStack = arguments.length === 1 ? a.create ()   : arguments [0];
+      var aPath  = arguments.length === 1 ? arguments [0] : arguments [1];
 ```
 
 We store the type of `aPath` into a local variable `aPathType`.

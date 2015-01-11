@@ -1,5 +1,5 @@
 /*
-aStack - v2.3.0
+aStack - v2.3.1
 
 Written by Federico Pereiro (fpereiro@gmail.com) and released into the public domain.
 
@@ -194,8 +194,8 @@ Please refer to readme.md to read the annotated source.
 
    a.fork = function () {
 
-      var aStack = type (arguments [0]) !== 'object' ? a.create ()   : arguments [0];
-      var aPath  = type (arguments [0]) !== 'object' ? arguments [0] : arguments [1];
+      var aStack = arguments.length === 1 ? a.create ()   : arguments [0];
+      var aPath  = arguments.length === 1 ? arguments [0] : arguments [1];
 
       var aPathType = type (aPath);
 

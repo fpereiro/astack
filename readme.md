@@ -643,7 +643,7 @@ If neither `X` nor `default` are defined, `aCond` `a.return`s `false`.
 
 `a.fork` is a function that is useful for asynchronous *parallel* execution. You can see it in action in the [parallel execution example above](https://github.com/fpereiro/astack#parallel-execution).
 
-`a.fork` takes three arguments:
+`a.fork` takes two arguments:
 - An `aStack` (optional). If you omit it, `a.fork` will create a new one.
 - An `aStep`/`aPath`, or an object where every key is an `aStep`/`aPath`.
 

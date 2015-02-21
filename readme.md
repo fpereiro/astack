@@ -1,4 +1,6 @@
-#aStack
+# aStack
+
+> "Callbacks are the continuation of control flow by other means." -- Carl von Clausewitz
 
 aStack is a Javascript tool for writing asynchronous functions almost as if they were synchronous.
 
@@ -726,7 +728,7 @@ Below is the annotated source.
 
 ```javascript
 /*
-aStack - v2.3.1
+aStack - v2.3.2
 
 Written by Federico Pereiro (fpereiro@gmail.com) and released into the public domain.
 
@@ -1248,7 +1250,7 @@ There's nothing else to do, so we close the function.
 
 We will now define `a.return`.
 
-`a.return takes three arguments, `aStack`, `last` and `copy`.
+`a.return` takes three arguments, `aStack`, `last` and `copy`.
 
 ```javascript
    a.return = function (aStack, last, copy) {
@@ -1448,7 +1450,7 @@ The first thing that this function does is to set `output [key]` to the value `r
          output [key] = stack.last;
 ```
 
-Notice that `output` is the array we created a few lines above. By defining `collect` within each call to `a.fork`, we allow each parallel execution thread to have a reference common to all of them, which allows all of them to behave as a unit. The same happens with `iterator`, as we will see below.
+Notice that `output` is the array/object we created a few lines above. By defining `collect` within each call to `a.fork`, we allow each parallel execution thread to have a reference common to all of them, which allows all of them to behave as a unit. The same happens with `iterator`, as we will see below.
 
 If in the `stack` there are any keys that are neither `aPath` nor `last` (that is, other stack parameters), we place them in the original `aStack`, which is the `aStack` that `a.fork` received. If there's any overlap within stack parameters from different parallel `aStep`s, the last `aStep` to `a.return` will prevail. For example, if `aPath [4]` sets `aStack.data` and `aPath [2]` sets `aStack.data` too, if `aPath [2]` `a.return`s later than `aPath [4]`, it will overwrite the value of `aStack.data` set by `aPath [4]`.
 

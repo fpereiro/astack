@@ -1,6 +1,6 @@
 {
    "name": "astack",
-   "version": "2.3.1",
+   "version": "2.3.2",
    "description": "Tool for writing sequences of asynchronous functions.",
    "main": "astack.js",
    "author": "Federico Pereiro <fpereiro@gmail.com>",

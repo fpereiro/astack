@@ -1,6 +1,6 @@
 # aStack
 
-> "Callbacks are the continuation of control flow by other means." -- Carl von Clausewitz
+> "Callbacks are merely the continuation of control flow by other means." -- Carl von Clausewitz
 
 aStack is a Javascript tool for writing asynchronous functions almost as if they were synchronous.
 
@@ -728,7 +728,7 @@ Below is the annotated source.
 
 ```javascript
 /*
-aStack - v2.3.2
+aStack - v2.3.3
 
 Written by Federico Pereiro (fpereiro@gmail.com) and released into the public domain.
 

@@ -1,5 +1,5 @@
 /*
-aStack - v2.3.3
+aStack - v2.4.0
 
 Written by Federico Pereiro (fpereiro@gmail.com) and released into the public domain.
 
@@ -40,21 +40,22 @@ Run the examples by either including the script in a webpage or by running `node
 
    // *** SEQUENTIAL EXECUTION ***
 
-   function writeFile (aStack, path, data) {
+   function writeFile (aStack, path, data, mute) {
       if (typeof (path) !== 'string') {
          a.return (aStack, false);
       }
       else {
-         fs.writeFile (path, data, {encoding: 'utf8'}, function () {
-            console.log ('Current value of', path, 'is', data);
-            a.return (aStack, true);
+         fs.writeFile (path, data, {encoding: 'utf8'}, function (error) {
+            if (error) return a.return (aStack, false);
+            if (! mute) console.log ('Current value of', path, 'is', data);
+            a.return (aStack, data);
          });
       }
    }
 
-   function incrementFile (aStack, path) {
+   function incrementFile (aStack, path, mute) {
       fs.readFile (path, function (error, data) {
-         writeFile (aStack, path, parseInt (data) + 1);
+         writeFile (aStack, path, parseInt (data) + 1, mute);
       });
    }
 
@@ -70,13 +71,13 @@ Run the examples by either including the script in a webpage or by running `node
 
    // *** CONDITIONAL EXECUTION ***
 
-   function writeAndIncrement (aStack, path) {
-      a.cond (aStack, [writeFile, path, '0'], {
-         true: [incrementFile, path],
+   function writeAndIncrement (aStack, path, mute) {
+      a.cond (aStack, [writeFile, path, '0', mute], {
          false: [function (aStack) {
             console.log ('There was an error when writing to the file', path, 'so no incrementing will take place.');
             a.return (aStack, false);
-         }]
+         }],
+         default: [incrementFile, path, mute]
       });
    }
 
@@ -93,13 +94,14 @@ Run the examples by either including the script in a webpage or by running `node
    function PARALLEL (aStack) {
       console.log ('Starting PARALLEL test.');
       a.call (aStack, [
-         [a.fork, [
-            [writeAndIncrement, 'count0.txt'],
-            [writeAndIncrement, 'count1.txt'],
-            [writeAndIncrement, 'count2.txt']
-         ]],
+         [a.fork, [0, 1, 2], function (v) {
+            return [writeAndIncrement, 'count' + v + '.txt'];
+         }],
          [function (aStack) {
             console.log ('a.fork operation ready. Result was', aStack.last);
+            for (var key in aStack.last) {
+               if (aStack.last [key] !== 1) return a.return (aStack, false);
+            }
             a.return (aStack, true);
          }]
       ]);
@@ -128,13 +130,18 @@ Run the examples by either including the script in a webpage or by running `node
       });
    }
 
-   function CLEANUP (aStack) {
+   function CLEANUP (aStack, files) {
       console.log ('Starting CLEANUP.');
-      a.fork (aStack, [
-         [deleteFile, 'count.txt'],
-         [deleteFile, 'count0.txt'],
-         [deleteFile, 'count1.txt'],
-         [deleteFile, 'count2.txt']
+      a.call (aStack, [
+         [a.fork, files, function (v) {
+            return [deleteFile, 'count' + v + '.txt'];
+         }],
+         [function (aStack, last) {
+            for (var key in last) {
+               if (last [key] !== true) return a.return (aStack, false);
+            }
+            a.return (aStack, true);
+         }]
       ]);
    }
 
@@ -207,15 +214,18 @@ Run the examples by either including the script in a webpage or by running `node
 
    function EXAMPLE3 (aStack) {
       console.log ('Starting EXAMPLE3.');
+      var counter = 0;
 
       function someFunction (aStack) {
+         counter++;
          console.log (arguments [1], arguments [2]);
-         a.return (aStack, true);
+         a.return (aStack, counter);
       }
 
       function someOtherFunction (aStack) {
+         counter++;
          console.log (arguments [1]);
-         a.return (aStack, true);
+         a.return (aStack, counter);
       }
 
       a.call (aStack, [
@@ -240,12 +250,12 @@ Run the examples by either including the script in a webpage or by running `node
          }],
          [function (aStack) {
             console.log (aStack.last, aStack.message);
-            a.return (aStack, true);
+            a.return (aStack, aStack.last);
          }],
          [function (aStack) {
             console.log (aStack.last, aStack.message);
             delete aStack.message;
-            a.return (aStack, true);
+            a.return (aStack, aStack.last);
          }]
       ]);
    }
@@ -255,7 +265,7 @@ Run the examples by either including the script in a webpage or by running `node
 
       function async1 (aStack) {
          console.log (arguments [1], arguments [2]);
-         a.return (aStack, true);
+         a.return (aStack, aStack.last);
       }
 
       a.call (aStack, [
@@ -265,27 +275,33 @@ Run the examples by either including the script in a webpage or by running `node
          }],
          [async1, '@data', '@last'],
          [function (aStack) {
+            delete aStack.data;
             a.return (aStack, {data: 'b52', moreData: [1, 2, 3]});
          }],
          [async1, '@last.data', '@last.moreData.1'],
-         [function (aStack) {delete aStack.data; a.return (aStack, true)}]
+         [function (aStack, b52, two, undef) {
+            a.return (aStack, b52 === 'b52' && two === 2 && undef === undefined)
+         }, '@last.data', '@last.moreData.1', '@last.does.not.exist']
       ]);
    }
 
    function EXAMPLE6 (aStack) {
       console.log ('Starting EXAMPLE6.');
 
-      a.call (aStack, [
+      a.stop (aStack, false, [
          [a.fork, {
             'count0': [writeAndIncrement, 'count0.txt'],
             'count1': [writeAndIncrement, 'count1.txt'],
             'count2': [writeAndIncrement, 'count2.txt']
          }],
-         [function (aStack) {
+         [function (aStack, last) {
             console.log ('a.fork operation ready. Result was', aStack.last);
+            for (var key in last) {
+               if (last [key] !== 1) return a.return (aStack, false);
+            }
             a.return (aStack, true);
          }],
-         [CLEANUP]
+         [CLEANUP, [0, 1, 2]],
       ]);
    }
 
@@ -296,19 +312,25 @@ Run the examples by either including the script in a webpage or by running `node
          a.return (aStack, true);
       }
 
-      a.call (aStack, [
+      a.stop (aStack, false, [
          [a.fork, [
             [async1],
             [async1],
             [async1]
          ]],
          [a.log],
+         [function (aStack, last) {
+            a.return (aStack, JSON.stringify (last) === JSON.stringify ([true, true, true]));
+         }],
          [a.fork, {
             first: [async1],
             second: [async1],
             third: [async1]
          }],
          [a.log],
+         [function (aStack, last) {
+            a.return (aStack, JSON.stringify (last) === JSON.stringify ({first: true, second: true, third: true}));
+         }],
       ]);
    }
 
@@ -334,27 +356,133 @@ Run the examples by either including the script in a webpage or by running `node
             [inner],
             [inner]
          ]],
-         [a.log]
+         [a.log],
+         [function (aStack) {
+            a.return (aStack, aStack.data.length);
+         }]
       ]);
+   }
+
+   function EXAMPLE9 (aStack) {
+      console.log ('Starting EXAMPLE9.');
+      var total = 1000;
+      var data = [];
+      while (total > 0) {
+         data.push (total--);
+      }
+      var waitCounter = 0;
+      a.call (aStack, [
+         [a.fork, data, function (v) {
+            return [writeAndIncrement, 'count' + v + '.txt', true];
+         }, {max: 200}],
+         [a.fork, data, function (v) {
+            return [deleteFile, 'count' + v + '.txt'];
+         }, {max: 200, beat: 200, test: function () {
+            waitCounter++;
+            if (waitCounter > 4) return true;
+            console.log ('Waiting until 5. waitCounter', waitCounter);
+         }}],
+         [a.return, true]
+      ]);
+   }
+
+   function EXAMPLE10 (aStack) {
+      console.log ('Starting EXAMPLE10.');
+      function async1 (aStack, data) {
+         a.return (aStack, data);
+      }
+      a.fork (aStack, [
+         [async1, 'a'],
+         [async1, 'b'],
+         [async1, 'c']
+      ]);
+   }
+
+   function EXAMPLE11 (aStack) {
+      console.log ('Starting EXAMPLE11.');
+
+      function async1 (aStack, data) {
+         a.return (aStack, data);
+      }
+
+      a.fork (aStack, ['a', 'b', 'c'], function (v) {
+         return [async1, v];
+      });
+   }
+
+   function EXAMPLE12 (aStack) {
+      console.log ('Starting EXAMPLE12.');
+
+      function async1 (aStack, data) {
+         a.return (aStack, data);
+      }
+
+      a.fork (aStack, ['a', 'b', 'c'], function (v) {
+         return [async1, v];
+      }, {max: 1});
+   }
+
+   function EXAMPLE13 (aStack) {
+
+      console.log ('Starting EXAMPLE13.');
+
+      function async1 (aStack, data) {
+         a.return (aStack, data);
+      }
+
+      var item = 10000;
+      var queue = [];
+
+      a.fork (aStack, queue, function (v) {
+         return [async1, v];
+      }, {max: 1000, beat: 100});
+
+      while (item > 0) {
+         queue.push (item--);
+      }
    }
 
    // *** INVOKING ALL THE EXAMPLES IN SEQUENCE ***
 
-   a.call ([
-      [SEQUENTIAL],
-      [CONDITIONAL],
-      [PARALLEL],
-      [STOP],
-      [CLEANUP],
-      [EXAMPLE1],
-      [EXAMPLE2],
-      [EXAMPLE3],
-      [EXAMPLE4],
-      [EXAMPLE5],
-      [EXAMPLE6],
-      [EXAMPLE7],
-      [EXAMPLE8],
-      [function () {console.log ('All tests finished!')}]
+   function tester (tests) {
+      for (var test in tests) {
+         var map = {default: [a.return, false]};
+         map [tests [test] [1]] = [a.return, true];
+         tests [test] = [a.cond, [tests [test] [0]], map];
+      }
+      tests.push ([a.return, true]);
+      a.cond ([a.stop, false, tests], {
+         true: [function () {console.log ('All tests finished successfully!')}],
+         false: [function () {console.log ('One of the tests failed!')}]
+      });
+   }
+
+   tester ([
+      [SEQUENTIAL, 3],
+      [CONDITIONAL, false],
+      [PARALLEL, true],
+      [STOP, false],
+      [[CLEANUP, ['', 0, 1, 2]], true],
+      [EXAMPLE1, true],
+      [EXAMPLE2, 'hey'],
+      [EXAMPLE3, 6],
+      [EXAMPLE4, 'Hey there!'],
+      [EXAMPLE5, true],
+      [EXAMPLE6, true],
+      [EXAMPLE7, true],
+      [EXAMPLE8, 1],
+      [EXAMPLE9, true],
+      [EXAMPLE10, ['a', 'b', 'c']],
+      [EXAMPLE11, ['a', 'b', 'c']],
+      [EXAMPLE12, ['a', 'b', 'c']],
+      [EXAMPLE13, function () {
+         item = 10000;
+         var output = [];
+         while (item > 0) {
+            output.push (item--);
+         }
+         return output;
+      } ()]
    ]);
 
 }) ();

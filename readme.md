@@ -24,6 +24,7 @@ And you also can use it in node.js. To install: `npm install astack`
 - [From callbacks to aStack](https://github.com/fpereiro/astack#from-callbacks-to-astack): count the differences.
 - [The elements of aStack](https://github.com/fpereiro/astack#the-elements-of-astack): the gist.
 - [Four more functions](https://github.com/fpereiro/astack#four-more-functions): conditional execution, parallel execution, and a couple more.
+- [Why so many square brackets?!](https://github.com/fpereiro/astack#why-so-many-square-brackets): it took me a while to figure this one out.
 - [Annotated source code](https://github.com/fpereiro/astack#source-code).
 
 ## Usage examples
@@ -107,11 +108,9 @@ Try writing '0' and then incrementing, for three different files at the same tim
 
 ```javascript
 a.call ([
-   [a.fork, [
-      [writeAndIncrement, 'count0.txt'],
-      [writeAndIncrement, 'count1.txt'],
-      [writeAndIncrement, 'count2.txt']
-   ]],
+   [a.fork, [0, 1, 2], function (v) {
+      return [writeAndIncrement, 'count' + v + '.txt']
+   }],
    [function (aStack) {
       console.log ('a.fork operation ready. Result was', aStack.last);
       a.return (aStack, true);
@@ -132,6 +131,30 @@ a.fork operation ready. Result was [ true, true, true ]
 ```
 
 Notice that the order of lines 4 to 6 may vary, depending on the actual order on which the files were written.
+
+Run concurrently an expensive operation, without doing more than `n` operations simultaneously.
+
+```javascript
+function memoryIntensiveOperation (aStack, datum) {
+   ...
+}
+
+var bigData = [1, 2, 3, ..., 999999, 1000000];
+
+a.fork (data, function (v) {
+   return [memoryIntensiveOperation, v];
+}, {max: n});
+```
+
+Run concurrently an expensive operation, spawning operations unless the process' memory usage exceeds a `threshold`.
+
+```javascript
+a.fork (data, function (v) {
+   return [memoryIntensiveOperation, v];
+}, {test: function () {
+   return process.memoryUsage.heapTotal < threshold;
+}});
+```
 
 ## The async problem
 
@@ -263,7 +286,7 @@ This is the async problem: how to execute arbitrary sequences of asynchronous fu
 
 Faced with the async problem, how can we make asynchronous functions behave more like synchronous functions, without callback hell and without loss of generality?
 
-Let's see how we can transform callback hell into aStack.
+Let's see how we can transform callback hell into aStack <del>hell</del>.
 
 **Callback hell:**
 
@@ -314,8 +337,9 @@ Let's count the differences between both examples:
 1. In the first example, every async function takes a `callback` as its last argument. In the second one, every async function takes an `aStack` as its first argument.
 2. In the first example, `async1` finish their execution by invoking the `callback`. In the second one, they invoke a function named `a.return`, and pass to it both the `aStack` and the `return`ed value.
 3. In the first example, we have nested anonymous functions passing callbacks. In the second one, `asyncSequence` invokes a function named `a.call`, which receives as argument the `aStack` and an array with asynchronous functions and their arguments.
+4. In the second example, every combination of function + arguments is wrapped in an array, even when the function has no arguments.
 
-These three differences (`aStack`, `a.call` and `a.return`) allow you to write asynchronous functions almost as if they were synchronous. In the next section we will explore how.
+These three differences (`aStack`, `a.return`, `a.call` and wrapping function+arguments in an array) allow you to write asynchronous functions almost as if they were synchronous. In the next section we will explore how.
 
 ## The elements of aStack
 
@@ -645,35 +669,108 @@ If neither `X` nor `default` are defined, `aCond` `a.return`s `false`.
 
 `a.fork` is a function that is useful for asynchronous *parallel* execution. You can see it in action in the [parallel execution example above](https://github.com/fpereiro/astack#parallel-execution).
 
-`a.fork` takes two arguments:
+`a.fork` takes one to four arguments:
 - An `aStack` (optional). If you omit it, `a.fork` will create a new one.
-- An `aStep`/`aPath`, or an object where every key is an `aStep`/`aPath`.
+- `data`, which can be an array, an object, an `aStep`/`aPath`, or an object where every key is an `aStep`/`aPath`.
+- `fun`, which is a function that outputs an `aStep`/`aPath` for each item in `data`.
+- `options`, the object with three keys:
+   - `options.max`, an integer that determines the maximum number of concurrent operations.
+   - `options.test`, a function that returns `true` or a falsy value, depending on whether `a.fork` can keep on firing concurrent operations.
+   - `options.beat`, an integer that determines the amount of milliseconds to wait for new data after processing the existing one.
 
-`a.fork` executes every `aStep` within the `aPath` in parallel, generating n simultaneous calls to `a.call`. As these calls finish, their results are stored in an output object held by `a.fork`. The output object will be an array or an object, depending on whether you invoked `a.fork` with an `aStep`/`aPath` or with an object containing `aStep`s/`aPath`s.
+If you pass an empty array or object as data, `a.fork` will just return an empty array or object.
+
+The simplest way of using `a.fork` is passing it an `aPath` (you can also pass a single `aStep`, but having only one operation to execute renders concurrency useless).
 
 ```javascript
-function async1 (aStack) {
-   a.return (aStack, true);
+
+function async1 (aStack, data) {
+   a.return (aStack, data);
 }
 
 a.fork ([
-   [async1],
-   [async1],
-   [async1]
-]);
-
-a.fork ({
-   first: [async1],
-   second: [async1],
-   third: [async1]
+   [async1, 'a'],
+   [async1, 'b'],
+   [async1, 'c']
 ]);
 ```
 
-In the example above, the first invocation to `a.fork` will `a.return` `[true, true, true]`, while the second one will `a.return` `{first: true, second: true, third: true}`.
+In this case, `a.fork` will return `['a', 'b', 'c']`, that is, one result per `aPath` passed.
 
-The array/object `a.return`ed by `a.fork` has a one-to-one correspondence with the array/object passed to `a.fork`.
+Slightly more interesting is passing an object where each value is an `aStep`/`aPath`:
 
-If you pass an empty `aPath`, `a.fork` will just return an empty array, and if you pass it a single `aStep`, it will return an array containing the result of `a.call`ing that `aStep`.
+```javascript
+a.fork ({
+   first: [async1, 'a'],
+   second: [async1, 'b'],
+   third: [async1, 'c']
+});
+```
+
+In this case, `a.fork` will return `{first: 'a', second: 'b', third: 'c'}`, that is, one result per `aPath` passed.
+
+Notice that `a.fork` returns an array/object where each element corresponds with the `aStep`/`aPath` it received, even if the concurrent operations returned *in an order different to which they were fired*.
+
+Most of the time, however, you don't want to pass an `aStep`/`aPath`. Rather, you want to pass a function that generates an `aStep`/`aPath` *from an array of data*. This function, called `fun`, receives each item from `data` and outputs an `aStep`/`aPath`.
+
+```javascript
+a.fork (['a', 'b', 'c'], function (v) {
+   return [async1, v];
+});
+```
+
+In this case, `a.fork` will return the same output than in the first example: `['a', 'b', 'c']`.
+
+Now, let's go to the really interesting cases.
+
+Imagine that you have a million data points, and you want to execute an async process for each of them. In most cases, firing all of these processes concurrently will overload your system. Through the `options` object, you can limit the amount of concurrent operations by setting `options.max` to `n` (where `n` is the maximum of concurrent operations).
+
+```javascript
+a.fork ([1, 2, 3, ..., 999999, 1000000], function (v) {
+   return [async1, v];
+}, {max: n});
+```
+
+Or imagine that `async1` is memory heavy and you want to limit the memory usage to a certain `threshold`. In this case, set `options.test` to a function that returns `true` when the memory usage is below `threshold`.
+
+```javascript
+a.fork ([1, 2, 3, ..., 999999, 1000000], function (v) {
+   return [async1, v];
+}, {test: function () {
+   return process.memoryUsage.heapTotal < threshold;
+});
+```
+
+You can combine both `options.max` and `options.test`.
+
+```javascript
+a.fork ([1, 2, 3, ..., 999999, 1000000], function (v) {
+   return [async1, v];
+}, {max: n, test: function () {
+   return process.memoryUsage.heapTotal < threshold;
+});
+```
+
+The most sophisticated use case is streaming data items into `a.fork`, without having to batch the data.
+
+```javascript
+
+var queue = [];
+
+a.fork (queue, function (v) {
+   return [async1, v];
+}, {max: 1000, beat: 500});
+
+event.on ('data', function (data) {
+   queue.push (data);
+});
+```
+
+In the above code, `a.fork` will receive data items as they are generated by `event`, simply by pushing the data items into `queue`. Because of how `a.fork` is implemented, if you pass an array to it, `a.fork` will process data items that are pushed to the array, *even if they are added after `a.fork` started executing*.
+
+`options.beat` is an integer that tells `a.fork` how many milliseconds to wait for new data items. When `options.beat` is greater than 0, after reaching the end of its `data`, `a.fork` will wait and recheck if there are new `data` elements. If after this period there are no further elements, `a.fork` returns.
+
+If neither `options.max` nor `options.test` are defined, `options.beat` is set to `0`. If either of these are defined, it is set to `100`. Naturally, you can override this value.
 
 When `a.fork` executes parallel `aPath`s, it will create copies of the `aStack` that are local to them. The idea behind this is to avoid side effects between parallel asynchronous calls. However, you should bear in mind two caveats:
 
@@ -720,15 +817,67 @@ To inspect the contents of the `aStack`, place an `aStep` calling `a.log` just b
 
 `a.log` prints the contents of the aStack (but without printing the `aPath`), plus further arguments you pass to it. It then `returns` aStack.last, so execution resumes unaffected.
 
+## Why so many square brackets?!
+
+You may be wondering: why do we need to wrap `aStep`s with no arguments (that is, mere functions) with square brackets? In other words, why can't we pass `aFunctions` without wrapping them in an array?
+
+If we didn't have to do this, the readability of `aStack` would certainly improve. To see this, we can go back to the example where I compare callback hell to aStack <del>hell</del>.
+
+Without requiring `aFunction`s to be wrapped in an array, the following function:
+
+```javascript
+function asyncSequence (aStack, data, callback) {
+   a.call (aStack, [
+      [async1, data],
+      [async2],
+      [async3],
+      [callback]
+   ]);
+}
+```
+
+Could be written like this:
+
+```javascript
+function asyncSequence (aStack, data, callback) {
+   a.call (aStack, [[async1, data], async2, async3, callback]);
+}
+```
+
+To do this, we would be able to define an `aPath` as an array containing both `aPath`s and `aFunction`s.
+
+However, consider the following example:
+
+```javascript
+[a.log,  [a.call, ...]]
+
+[a.call, [a.log,  ...]]
+```
+
+In our eyes, these two `aPath`s mean the following:
+
+1) Execute `a.log`, then execute `a.call` passing `...` as its argument.
+2) Execute `a.call`, passing it an `aPath` that contains `a.log` as first argument and `...` as its second argument.
+
+Why do we interpret the first example to have two steps, whereas we interpret the second as having only one step? Structurally speaking, the examples are identical, except for us swapping `a.log` and `a.call`.
+
+The reason we consider them differently is that *we know that `a.call` takes `aStep`/`aPath`s as arguments*, and that `a.log` doesn't (or at least, not often).
+
+If we wanted to write `aFunction`s alongside `aStep`s (or even `aPath`s), we would need to understand when an `aStep` or `aPath` stands on itself, and when it is passed as an argument to the `aFunction` to its left.
+
+I cannot think of any elegant way of giving this information to aStack. Inspecting the functions signatures seems complicated and error-prone. And hardcoding a list of `aFunction`s that takes `aStep`/`aPath`s impedes you to write higher-order `aFunction`s - it's quite reasonable you'll want to write your own.
+
+To avoid this ambiguity (and clumsy workarounds around it) is that we need to wrap every `aStep` in an array.
+
 ## Source code
 
-The complete source code is contained in `astack.js`. It is about 270 lines long.
+The complete source code is contained in `astack.js`. It is about 310 lines long.
 
 Below is the annotated source.
 
 ```javascript
 /*
-aStack - v2.3.3
+aStack - v2.4.0
 
 Written by Federico Pereiro (fpereiro@gmail.com) and released into the public domain.
 
@@ -1053,16 +1202,12 @@ We will now define `a.call`, the main function of the library. This function wil
 
 `a.call` is a [variadic function](http://en.wikipedia.org/wiki/Variadic_function), because it can be invoked with or without an `aStack`. How do we determine this? If the first argument received by the function is an object, it can only be an `aStack`, since the second argument is an `aPath` or `aStep` (which is an array).
 
-If the first argument is not an object, we consider that argument to be the `aPath`, so we initialize the `aStack`. Otherwise, we consider the first argument to be the `aStack`.
+If the first argument is an object, we consider that argument to be the `aStack`. Otherwise, we consider the first argument to be the `aPath`.
 
 ```javascript
-      var aStack   = type (arguments [0]) !== 'object' ? a.create ()   : arguments [0];
-```
-
-Depending on whether the function received an `aStack` or not, we set `aPath` to either the second or the first argument respectively.
-
-```javascript
-      var aPath    = type (arguments [0]) !== 'object' ? arguments [0] : arguments [1];
+      var hasStack = type (arguments [0]) === 'object';
+      var aStack   = hasStack ? arguments [0] : a.create ();
+      var aPath    = hasStack ? arguments [1] : arguments [0];
 ```
 
 `a.call` supports a private argument, `external`, which is a boolean flag that is passed as the last argument to `a.call`. We will see the purpose of this `external` below.
@@ -1284,8 +1429,10 @@ If `copy` is defined, we store an extra copy of the `last` parameter in the `aSt
 
 We invoke `a.call`, passing the `aStack` and an empty `aPath`. Because of how `a.call` works, this will effectively invoke the next function within `aStack.aPath`, so that `last` is actually `return`ed to the next function.
 
+Also notice that we pass `true` as the last argument to `a.call`, to tell that function not to bother flattening the empty array we're passing as `aPath`.
+
 ```javascript
-      return a.call (aStack, []);
+      return a.call (aStack, [], true);
    }
 ```
 
@@ -1297,22 +1444,23 @@ We invoke `a.call`, passing the `aStack` and an empty `aPath`. Because of how `a
    a.cond = function () {
 ```
 
-If the first argument to the function is not an object, we consider that no `aStack` has been created, so we create one. Otherwise, we take the first argument to be the `aStack`.
+If the first argument to the function is an object, we consider that element to be the `aStack`. Otherwise, we create it.
 
 ```javascript
-      var aStack   = type (arguments [0]) !== 'object' ? a.create ()   : arguments [0];
+      var hasStack = type (arguments [0]) === 'object';
+      var aStack   = hasStack ? arguments [0] : a.create ();
 ```
 
 We define `aCond`, which is the `aStep` or `aPath` that represents the asynchronous condition. Depending on whether an `aStack` was passed or not, it is either the first or the second argument.
 
 ```javascript
-      var aCond    = type (arguments [0]) !== 'object' ? arguments [0] : arguments [1];
+      var aCond    = hasStack ? arguments [1] : arguments [0];
 ```
 
 We define `aMap`, which is an object containing one `aStep` or `aPath` per key. Depending on whether an `aStack` was passed or not, it is either the second or the third argument.
 
 ```javascript
-      var aMap     = type (arguments [0]) !== 'object' ? arguments [1] : arguments [2];
+      var aMap     = hasStack ? arguments [2] : arguments [1];
 ```
 
 Since `a.stop` below invokes `a.cond`, and we never want to flatten an `aPath` more than once, we set this flag to precisely avoid this, as we did on `a.call` above.
@@ -1321,10 +1469,10 @@ Since `a.stop` below invokes `a.cond`, and we never want to flatten an `aPath` m
       var external = arguments [arguments.length - 1] === true ? false : true;
 ```
 
-If `aMap` is not an object, we `return` `false`.
+If `aMap` is not an object, we print an error and `a.return` `false`.
 
 ```javascript
-      if (type (aMap) !== 'object') return a.return (aStack, false);
+      if (type (aMap) !== 'object') return a.return (aStack, e ('aMap has to be an object but instead is', aMap, 'with type', type (aMap)));
 ```
 
 As we did above in `a.call`, if the `aPath` (which in this case is named `aCond`) was not validated/flattened, we do so. If it is invalid, we `return` `false`, both synchronously and asynchronously.
@@ -1386,53 +1534,127 @@ The last thing to do is to invoke `a.call`, passing it the modified `aCond` and 
    a.fork = function () {
 ```
 
-Like `a.call` and `a.cond` above, `a.fork` can be invoked with or without an `aStack`. To determine whether an `aStack` was passed or not, we measure the number of arguments. If only one is passed, we assume this element to be the `aPath`, otherwise we consider the first to be the `aStack` and the second one to be the `aPath`. Argument detection is done differently from other functions in the library because a) the `aPath` can also be an object containing `aPath`s/`aStep`s; and b) there's no `external` argument in `a.fork`.
+Like `a.call` and `a.cond` above, `a.fork` can be invoked with or without an `aStack`. We determine whether the `aStack` is present or not. Notice that `data`, the following argument, might be an object, so it's not enough to determine that the first argument it's an object. In this case, we add an extra check: we consider the first element to be an `aStack` if it has an `aPath` element that's an array.
+
+In the unlikely case that you 1) don't pass an `aStack` to `a.fork` and 2) `data` is an object that has an `aPath` key, `a.fork` will confuse `data` with `aStack`.
+
+However, because of the variability of the rest of the arguments of this function, this is the only way I see to determine the presence or absence of an `aStack`.
+
+If the `aStack` is not present, we invoke it.
 
 ```javascript
-      var aStack = arguments.length === 1 ? a.create ()   : arguments [0];
-      var aPath  = arguments.length === 1 ? arguments [0] : arguments [1];
+      var hasStack   = type (arguments [0]) === 'object' && type (arguments [0].aPath) === 'array';
+      var aStack     = hasStack ? arguments [0] : a.create ();
 ```
 
-We store the type of `aPath` into a local variable `aPathType`.
+- `data` is a mandatory argument that contains an array or object.
+- `fun` is an optional function. If it's not present, `data` will be considered as an `aStep`/`aPath` (if it's an array), or as an object where every key is an `aStep`/`aPath`. If `fun` *is* present, `data` will be fed to the `fun` - the output will be an `aStep` or `aPath` per each item in `data`.
+- `options` is an optional object. If it's not defined, we initialize it to an empty object.
 
 ```javascript
-      var aPathType = type (aPath);
+      var data       = hasStack ? arguments [1] : arguments [0];
+      var fun        = type (arguments [hasStack ? 2 : 1]) === 'function' ? arguments [hasStack ? 2 : 1] : undefined;
+      var options    = arguments.length > (hasStack ? 2 : 1) && type (arguments [arguments.length - 1]) === 'object' ? arguments [arguments.length - 1] : {};
 ```
 
-If `aPath` is neither an array or an object, we `a.return` false.
+If `data` is neither an array or an object, we print an error and `a.return` false.
 
 ```javascript
-      if (aPathType !== 'array' && aPathType !== 'object') return a.return (aStack, false);
+      var dataType = type (data);
+
+      if ((dataType !== 'array' && dataType !== 'object')) {
+         return a.return (aStack, e ('data must be an array/object.'));
+      }
 ```
 
-We set up a local variable `iterator`, initialized to zero.
+We validate the `options` object, placing the following conditions:
+- `options.max`, if defined, must be an integer greater than 0.
+- `options.beat`: same than `options.max`.
+- `options.test`, if defined, must be a function.
 
 ```javascript
-      var iterator = 0;
+      if (options.max && (type (options.max) !== 'integer' || options.max < 1))  return a.return (aStack, e ('If defined, options.max must be an integer greater than 0.'));
+      if (options.beat && (type (options.beat) !== 'integer' || options.beat < 1))  return a.return (aStack, e ('If defined, options.beat must be an integer greater than 0.'));
+      if (options.test && type (options.test) !== 'function') return a.return (aStack, e ('If defined, options.test must be a function.'));
 ```
 
-For every key in `aPath`, we increment it. This has the effect of making `iterator` hold the number of elements of `aPath`, whether it is an object or an array.
+If `options.beat` is not set, we initialize it to `0` if `options.max` and `options.test` are both `undefined`. Otherwise, we initialize it to `100`.
 
 ```javascript
-      for (var key in aPath) {iterator++}
+      options.beat = options.beat || ((options.max || options.test) ? 100 : 0);
 ```
 
-We determine a local variable `output` to be either an array or an object, depending on `aPathType`.
+In the special case where data is empty, we return an empty array/object (corresponding to `data`'s type). Notice that when `data` is an array, we only return immediately if `options.beat` is zero. If `options.beat` is not zero, `a.fork` will wait for new elements to be added to the array until `options.beat` is elapsed.
 
 ```javascript
-      var output = aPathType === 'array' ? [] : {};
+      if (dataType === 'array'  && data.length === 0 && options.beat === 0) return a.return (aStack, []);
+      if (dataType === 'object' && Object.keys (data).length === 0)         return a.return (aStack, {});
 ```
 
-If `aPath` is an empty object or array, we `a.return` `output`.
+We determine a local variable `output` to be either an array or an object, depending on `aPathType`. Notice that when `data` is an array, `output` will be an empty array, whereas if `data` is an object, `output` will be now equal to `data`.
 
 ```javascript
-      if (iterator === 0) return a.return (aStack, output);
+      var output = dataType === 'array' ? [] : data;
 ```
+
+If `data` is an object, we set `data` to the *keys* of data. The values of data will still be available in `output`. The reason for this operation will soon become clear.
 
 ```javascript
+      if (dataType === 'object') data = Object.keys (data);
 ```
 
-Now we get to the interesting part: we need to make parallel asynchronous calls, without any kind of race conditions, and make `a.fork` return the results (`output`) only when the slowest parallel call has `a.return`ed.
+We set `counter` and `active` to two counters, initialized to `0`. `counter` will count how many concurrent processes have been spawned, whereas `active` will count how many concurrent processes are being executed at a given time.
+
+```javascript
+      var counter = 0;
+      var active  = 0;
+```
+
+We initialize a variable `test` to `true`. This variable will hold the current value of `options.test`, if the test is defined.
+
+```javascript
+      var test = true;
+```
+
+We create a helper function `fire`, that will return `true` or `false`. It will return true only if:
+- `counter` is less than `data.length`, which means we still have to spawn more functions.
+- `test` is `true`, which means that `options.test` is either absent or it allows us to keep on spawning functions.
+- `options.max` is either `undefined`, or if defined, it is less than the amount of active functions running right now.
+
+What this function does is respond two questions:
+- Do we need to keep on spawning functions?
+- Can we afford to do it currently?
+
+```javascript
+      function fire () {
+         return counter < data.length && test && (! options.max || options.max > active);
+      }
+```
+
+Because it would be computationally expensive to compute `options.test` every time a concurrent process starts or ends, we will execute this function at intervals, using `options.beat` as the time interval. We set this interval in a local variable `testInterval`.
+
+```javascript
+      var testInterval;
+```
+
+If `options.test` is defined, every `option.beat` milliseconds, we set `test` to the result of executing `options.test`. We then execute `fire`, and if it's `true`, we execute `load`, which is the function that spawns more functions. It is necessary to invoke `load` here, because if `a.fork` was waiting for `test` to become `true`, without firing `load` the spawning process won't restart.
+
+```javascript
+      if (options.test) {
+         var testRefresh = function () {
+            test = options.test ();
+            if (fire ()) load ();
+         }
+```
+
+We set `testInterval` once.
+
+```javascript
+         testInterval = setInterval (testRefresh, options.beat);
+      }
+```
+
+Now we get to the interesting part: we need to make parallel asynchronous calls, without any kind of race conditions, and make `a.fork` return the results (`output`) only when the last parallel call has `a.return`ed.
 
 To this effect, we'll define a helper function within the scope of the current call to `a.fork`. This function, `collect`, will take two arguments: an `aStack` (because it's an `aFunction`) and a `key`.
 
@@ -1444,13 +1666,15 @@ To this effect, we'll define a helper function within the scope of the current c
 
 Notice that the `aStack` passed to `collect` is named `stack`, so that `collect` can also refer to the original `aStack`.
 
-The first thing that this function does is to set `output [key]` to the value `return`ed by the last asynchronous function. This value will have been `return`ed by the `aStep` at position `key` of the `aPath`. Notice this will work for both an array and an object.
+The first thing that this function does is to set `output [key]` to the value `return`ed by the last asynchronous function. This value will have been `return`ed by the `aStep` at position `key` of the `aPath`. Notice this will work for both an array and an object. It will also work if elements are appended to `data` after `a.fork` fired.
 
 ```javascript
          output [key] = stack.last;
 ```
 
-Notice that `output` is the array/object we created a few lines above. By defining `collect` within each call to `a.fork`, we allow each parallel execution thread to have a reference common to all of them, which allows all of them to behave as a unit. The same happens with `iterator`, as we will see below.
+Notice that `output` is the array/object we created a few lines above. By defining `collect` within each call to `a.fork`, we allow each parallel execution thread to have a reference common to all of them, which allows all of them to behave as a unit.
+
+In case `data` is an `array`, `output [key]` will be undefined before setting it to `stack.last`. If it's an object, `output [key]` will contain the `aStep`/`aPath` being executed (or data that generates this `aStep`/`aPath` through `fun`). In this case, that value will be replaced by the `a.return`ed value of the corresponding `aStep`/`aPath`.
 
 If in the `stack` there are any keys that are neither `aPath` nor `last` (that is, other stack parameters), we place them in the original `aStack`, which is the `aStack` that `a.fork` received. If there's any overlap within stack parameters from different parallel `aStep`s, the last `aStep` to `a.return` will prevail. For example, if `aPath [4]` sets `aStack.data` and `aPath [2]` sets `aStack.data` too, if `aPath [2]` `a.return`s later than `aPath [4]`, it will overwrite the value of `aStack.data` set by `aPath [4]`.
 
@@ -1460,16 +1684,52 @@ If in the `stack` there are any keys that are neither `aPath` nor `last` (that i
          }
 ```
 
-We decrement `iterator`, since if we're invoking `collect`, it's because one of the `aStep`s just `a.return`ed.
+We decrement `active`, since if we're invoking `collect`, it's because one of the `aStep`s just `a.return`ed (and hence, it's not executing anymore).
 
 ```javascript
-         iterator--;
+         active--;
 ```
 
-Now, if `steps` is equal to zero, the current call to `collect` is taking place after the slowest parallel `aStep` finished executing. Thus, this invocation of `collect` is in charge of actually `a.return`ing the `output` to the original `aStack`.
+At this point, we invoke `fire` and if it returns `true`, we invoke `load`. Notice that so far we've invoked `load` in two places:
+- When we recalculate `options.test`.
+- When a function `a.return`s and `active` goes down, hence making room for another function in case `active` === `options.max`.
+
+A simpler way of putting this is: the two points where so far we invoked `load` are both places where a resource has been freed.
 
 ```javascript
-         if (iterator === 0) return a.return (aStack, output);
+         if (fire ()) return load ();
+```
+
+Now, if there are no `active` functions, and `counter` equals `data.length`, we are neither waiting for processes nor having to process more elements.
+
+```javascript
+         if (active === 0 && counter === data.length) {
+```
+
+If we didn't allow the possibility of waiting for more data, we would now return and be done. However, since we allow the possibility of new data being pushed to `data`, we set a timeout.
+
+```javascript
+            setTimeout (function () {
+```
+
+After waiting, if there's new data (we check this through `fire`), we execute `load`. Notice we execute `load` only if the possibility that new data arrives. If `fire` returns `true`, we also `return` from the timeout.
+
+```javascript
+               if (fire ()) return load ();
+```
+
+If we are here, no more data arrived. We are ready to finish. We clear `testInterval` and return `output`.
+
+```javascript
+               if (testInterval) clearInterval (testInterval);
+               if (active === 0 && counter === data.length)      a.return (aStack, output);
+```
+
+We set `options.beat` as the interval for the `setTimeout`. We close the conditional and the `collect` function.
+
+```javascript
+            }, options.beat);
+         }
       }
 ```
 
@@ -1484,10 +1744,45 @@ We now create a copy of the `aStack` and store it in a local variable `stack`. W
 
 The purpose of `stack` is to have a clean copy of the `aStack` that is not the `aStack` itself. The reason for this is extremely abstruse, but since you're reading this, we might as well explain it. Remember above when `collect` iterated through special keys (i.e.: neither `last` nor `aPath`) of its `aStack` and placed them into the original `aStack`? Well, any of these changes will be visible to parallel calls that are executed later. By making a copy of the original `aStack`, we preserve the original `aStack` as it was before any of the parallel calls starts executing.
 
-We now iterate each of the `aStep`s in the `aPath`.
+We set a variable `loading` that will determine whether we are currently spawning concurrent calls or not. The variable is initalized to `false`, since we haven't issued any concurrent functions yet.
 
 ```javascript
-      for (var k in aPath) {
+      var loading = false;
+```
+
+We now define `load`, the function that will issue concurrent function calls. The whole function consists of a while loop which will be executed only if `fire` returns `true` (hence, we need to process more data AND we have have available resources to do so) and if `load` is not currently being executed.
+
+```javascript
+      function load () {
+         while (fire () && loading === false) {
+```
+
+The first things we do are set `loading` to `true` (to block simultaneous calls to `call`), and increment both `counter` (to move forward the data element we're processing) and `active` (to indicate that we'll spawn a concurrent function).
+
+```javascript
+            loading = true;
+            counter++;
+            active++;
+```
+
+We define `key` to be either the `counter - 1` (in case `data` is an array) or the `counter - 1` element of `data` (in case `data` is an object - remember that by this point, if `data` was an object, it was later converted to an array holding keys).
+
+`key` allows the `a.return`ing call to know to which element of the `output` it belongs. If it wasn't for this, `a.fork` would return arrays/objects where each result corresponding to the order in which each parallel process finished, which not necessarily corresponds to the order these processes where presented to `a.fork`.
+
+```javascript
+            var key   = dataType === 'array' ? counter - 1 : data [counter - 1];
+```
+
+We define `value` to be either the element at `data [key]` (if `data` was originally an array) or to the `key` element of `output` (if `data` was originally an object).
+
+```javascript
+            var value = dataType === 'array' ? data [key]  : output [key];
+```
+
+If `fun` is defined, we set `value` to the output of `fun`, passing `value` and `key` as arguments (in that order). If `fun` returns a falsy value (usually `undefined`), `value` will be set to an empty array. The purpose of this empty array is to allow `fun` to return meanignful values only for certain items of `data` (and not others), without producing exceptions.
+
+```javascript
+            if (fun) value = fun (value, key) || [];
 ```
 
 We invoke `a.call` passing as its `aStack` a **copy** of `stack`. This copy will be unique to the particular parallel thread we are initializing.
@@ -1496,18 +1791,31 @@ We invoke `a.call` passing as its `aStack` a **copy** of `stack`. This copy will
          a.call (copy (stack), [
 ```
 
-Using this newly created `aStack`, we invoke `a.call`, passing to it each `aStep`, followed by an `aStep` containing `collect` and the key.
+Using this newly created `aStack`, we invoke `a.call`, passing to it `value` (which will be the `aStep`/`aPath` corresponding to the current `data` element), followed by an `aStep` containing `collect` and `key`.
 
 ```javascript
-            aPath [k],
-            [collect, k]
-         ]);
+               value,
+               [collect, key]
+            ]);
 ```
 
-There's nothing else to do. We close the loop and the function.
+Immediately after, we set `loading` to `false`. We then close the `while` loop and then `load`.
 
 ```javascript
+            loading = false;
+         }
       }
+```
+
+We set a timeout for running `load` after `options.beat` milliseconds. This is the initial invocation of `load`. Because of the timeout, `a.fork` can wait for new data elements even if it originally receives an empty array. If `options.beat` is zero, this will execute immediately.
+
+```javascript
+      setTimeout (load, options.beat);
+```
+
+There's nothing else to do. We close the function.
+
+```javascript
    }
 ```
 
@@ -1526,9 +1834,10 @@ The other arguments are `stopValue`, `aPath` (which can be also an `aStep` or an
 Since `a.stop` calls itself recursively, we enable the `external` flag to avoid repeated flattening of its `aPath`.
 
 ```javascript
-      var aStack    = type (arguments [0]) !== 'object' ? a.create ()   : arguments [0];
-      var stopValue = type (arguments [0]) !== 'object' ? arguments [0] : arguments [1];
-      var aPath     = type (arguments [0]) !== 'object' ? arguments [1] : arguments [2];
+      var hasStack  = type (arguments [0]) === 'object';
+      var aStack    = hasStack ? arguments [0] : a.create ();
+      var stopValue = hasStack ? arguments [1] : arguments [0];
+      var aPath     = hasStack ? arguments [2] : arguments [1];
       var external  = arguments [arguments.length - 1] === true ? false : true;
 ```
 

@@ -1,5 +1,5 @@
 /*
-aStack - v2.3.3
+aStack - v2.4.0
 
 Written by Federico Pereiro (fpereiro@gmail.com) and released into the public domain.
 
@@ -109,8 +109,9 @@ Please refer to readme.md to read the annotated source.
 
    a.call = function () {
 
-      var aStack   = type (arguments [0]) !== 'object' ? a.create ()   : arguments [0];
-      var aPath    = type (arguments [0]) !== 'object' ? arguments [0] : arguments [1];
+      var hasStack = type (arguments [0]) === 'object';
+      var aStack   = hasStack ? arguments [0] : a.create ();
+      var aPath    = hasStack ? arguments [1] : arguments [0];
       var external = arguments [arguments.length - 1] === true ? false : true;
 
       if (a.validate.aStack (aStack) === false) return false;
@@ -162,19 +163,20 @@ Please refer to readme.md to read the annotated source.
 
       if (copy !== undefined) aStack [copy] = last;
 
-      return a.call (aStack, []);
+      return a.call (aStack, [], true);
    }
 
    // *** CONDITIONAL EXECUTION ***
 
    a.cond = function () {
 
-      var aStack   = type (arguments [0]) !== 'object' ? a.create ()   : arguments [0];
-      var aCond    = type (arguments [0]) !== 'object' ? arguments [0] : arguments [1];
-      var aMap     = type (arguments [0]) !== 'object' ? arguments [1] : arguments [2];
+      var hasStack = type (arguments [0]) === 'object';
+      var aStack   = hasStack ? arguments [0] : a.create ();
+      var aCond    = hasStack ? arguments [1] : arguments [0];
+      var aMap     = hasStack ? arguments [2] : arguments [1];
       var external = arguments [arguments.length - 1] === true ? false : true;
 
-      if (type (aMap) !== 'object') return a.return (aStack, false);
+      if (type (aMap) !== 'object') return a.return (aStack, e ('aMap has to be an object but instead is', aMap, 'with type', type (aMap)));
 
       if (external) {
          aCond = a.flatten (aCond);
@@ -194,48 +196,93 @@ Please refer to readme.md to read the annotated source.
 
    a.fork = function () {
 
-      var aStack = arguments.length === 1 ? a.create ()   : arguments [0];
-      var aPath  = arguments.length === 1 ? arguments [0] : arguments [1];
+      var hasStack   = type (arguments [0]) === 'object' && type (arguments [0].aPath) === 'array';
+      var aStack     = hasStack ? arguments [0] : a.create ();
+      var data       = hasStack ? arguments [1] : arguments [0];
+      var fun        = type (arguments [hasStack ? 2 : 1]) === 'function' ? arguments [hasStack ? 2 : 1] : undefined;
+      var options    = arguments.length > (hasStack ? 2 : 1) && type (arguments [arguments.length - 1]) === 'object' ? arguments [arguments.length - 1] : {};
 
-      var aPathType = type (aPath);
+      var dataType = type (data);
 
-      if (aPathType !== 'array' && aPathType !== 'object') return a.return (aStack, false);
+      if ((dataType !== 'array' && dataType !== 'object')) {
+         return a.return (aStack, e ('data must be an array/object.'));
+      }
 
-      var iterator = 0;
+      if (options.max && (type (options.max) !== 'integer' || options.max < 1))  return a.return (aStack, e ('If defined, options.max must be an integer greater than 0.'));
+      if (options.beat && (type (options.beat) !== 'integer' || options.beat < 1))  return a.return (aStack, e ('If defined, options.beat must be an integer greater than 0.'));
+      if (options.test && type (options.test) !== 'function') return a.return (aStack, e ('If defined, options.test must be a function.'));
+      options.beat = options.beat || ((options.max || options.test) ? 100 : 0);
 
-      for (var key in aPath) {iterator++}
+      if (dataType === 'array'  && data.length === 0 && options.beat === 0) return a.return (aStack, []);
+      if (dataType === 'object' && Object.keys (data).length === 0)         return a.return (aStack, {});
 
-      var output = aPathType === 'array' ? [] : {};
+      var output = dataType === 'array' ? [] : data;
+      if (dataType === 'object') data = Object.keys (data);
 
-      if (iterator === 0) return a.return (aStack, output);
+      var counter = 0;
+      var active  = 0;
+
+      var test = true;
+
+      function fire () {
+         return counter < data.length && test && (! options.max || options.max > active);
+      }
+
+      var testInterval;
+      if (options.test) {
+         var testRefresh = function () {
+            test = options.test ();
+            if (fire ()) load ();
+         }
+         testInterval = setInterval (testRefresh, options.beat);
+      }
 
       function collect (stack, key) {
          output [key] = stack.last;
          for (var key in stack) {
             if (key !== 'aPath' && key !== 'last') aStack [key] = stack [key];
          }
-         iterator--;
-         if (iterator === 0) return a.return (aStack, output);
+         active--;
+         if (fire ()) return load ();
+         if (active === 0 && counter === data.length) {
+            setTimeout (function () {
+               if (fire ()) return load ();
+               if (testInterval) clearInterval (testInterval);
+               if (active === 0 && counter === data.length)      a.return (aStack, output);
+            }, options.beat);
+         }
       }
 
       var stack = copy (aStack);
       stack.aPath = [];
 
-      for (var k in aPath) {
-         a.call (copy (stack), [
-            aPath [k],
-            [collect, k]
-         ]);
+      var loading = false;
+      function load () {
+         while (fire () && loading === false) {
+            loading = true;
+            counter++;
+            active++;
+            var key   = dataType === 'array' ? counter - 1 : data [counter - 1];
+            var value = dataType === 'array' ? data [key]  : output [key];
+            if (fun) value = fun (value, key) || [];
+            a.call (copy (stack), [
+               value,
+               [collect, key]
+            ]);
+            loading = false;
+         }
       }
+      setTimeout (load, options.beat);
    }
 
    // *** TWO USEFUL FUNCTIONS ***
 
    a.stop = function () {
 
-      var aStack    = type (arguments [0]) !== 'object' ? a.create ()   : arguments [0];
-      var stopValue = type (arguments [0]) !== 'object' ? arguments [0] : arguments [1];
-      var aPath     = type (arguments [0]) !== 'object' ? arguments [1] : arguments [2];
+      var hasStack  = type (arguments [0]) === 'object';
+      var aStack    = hasStack ? arguments [0] : a.create ();
+      var stopValue = hasStack ? arguments [1] : arguments [0];
+      var aPath     = hasStack ? arguments [2] : arguments [1];
       var external  = arguments [arguments.length - 1] === true ? false : true;
 
       if (external) {

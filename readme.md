@@ -857,6 +857,7 @@ However, consider the following example:
 In our eyes, these two `aPath`s mean the following:
 
 1) Execute `a.log`, then execute `a.call` passing `...` as its argument.
+
 2) Execute `a.call`, passing it an `aPath` that contains `a.log` as first argument and `...` as its second argument.
 
 Why do we interpret the first example to have two steps, whereas we interpret the second as having only one step? Structurally speaking, the examples are identical, except for us swapping `a.log` and `a.call`.
@@ -865,9 +866,9 @@ The reason we consider them differently is that *we know that `a.call` takes `aS
 
 If we wanted to write `aFunction`s alongside `aStep`s (or even `aPath`s), we would need to understand when an `aStep` or `aPath` stands on itself, and when it is passed as an argument to the `aFunction` to its left.
 
-I cannot think of any elegant way of giving this information to aStack. Inspecting the functions signatures seems complicated and error-prone. And hardcoding a list of `aFunction`s that takes `aStep`/`aPath`s impedes you to write higher-order `aFunction`s - it's quite reasonable you'll want to write your own.
+I cannot think of any elegant way of giving this information to aStack. Inspecting function signatures seems complicated and error-prone. And hardcoding a list of `aFunction`s that takes `aStep`/`aPath`s impedes you to write higher-order `aFunction`s (it's quite reasonable you'll want to write your own).
 
-To avoid this ambiguity (and clumsy workarounds around it) is that we need to wrap every `aStep` in an array.
+To avoid this ambiguity (and clumsy workarounds or limitations) is that we need to wrap every `aStep` in an array.
 
 ## Source code
 
@@ -1772,6 +1773,8 @@ We define `key` to be either the `counter - 1` (in case `data` is an array) or t
 ```javascript
             var key   = dataType === 'array' ? counter - 1 : data [counter - 1];
 ```
+
+You may wonder: why don't we first set `key` and *then* increase `counter` (to avoid the clumsy `- 1`s)? Well, when the async functions being executed are really fast, incrementing the counter after this ends up setting strange race conditions. So far, the only way I found to avoid them was to increment the `counter` immediately when entering the loop.
 
 We define `value` to be either the element at `data [key]` (if `data` was originally an array) or to the `key` element of `output` (if `data` was originally an object).
 

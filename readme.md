@@ -141,7 +141,7 @@ function memoryIntensiveOperation (aStack, datum) {
 
 var bigData = [1, 2, 3, ..., 999999, 1000000];
 
-a.fork (data, function (v) {
+a.fork (bigData, function (v) {
    return [memoryIntensiveOperation, v];
 }, {max: n});
 ```
@@ -149,7 +149,7 @@ a.fork (data, function (v) {
 Run concurrently an expensive operation, spawning operations unless the process' memory usage exceeds a `threshold`.
 
 ```javascript
-a.fork (data, function (v) {
+a.fork (bigData, function (v) {
    return [memoryIntensiveOperation, v];
 }, {test: function () {
    return process.memoryUsage.heapTotal < threshold;
@@ -878,7 +878,7 @@ Below is the annotated source.
 
 ```javascript
 /*
-aStack - v2.4.0
+aStack - v2.4.1
 
 Written by Federico Pereiro (fpereiro@gmail.com) and released into the public domain.
 

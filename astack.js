@@ -1,5 +1,5 @@
 /*
-aStack - v2.4.1
+aStack - v2.4.2
 
 Written by Federico Pereiro (fpereiro@gmail.com) and released into the public domain.
 
@@ -19,19 +19,19 @@ Please refer to readme.md to read the annotated source.
 
    function type (value) {
       var type = typeof value;
+      if (type !== 'object' && type !== 'number') return type;
       if (type === 'number') {
-         if      (isNaN (value))      type = 'nan';
-         else if (! isFinite (value)) type = 'infinity';
-         else if (value % 1 === 0)    type = 'integer';
-         else                         type = 'float';
+         if      (isNaN (value))      return 'nan';
+         else if (! isFinite (value)) return 'infinity';
+         else if (value % 1 === 0)    return 'integer';
+         else                         return 'float';
       }
-      if (type === 'object') {
-         if (value === null)                                               type = 'null';
-         if (Object.prototype.toString.call (value) === '[object Date]')   type = 'date';
-         if (Object.prototype.toString.call (value) === '[object Array]')  type = 'array';
-         if (Object.prototype.toString.call (value) === '[object RegExp]') type = 'regex';
-      }
-      return type;
+      if (value === null) return 'null';
+      type = Object.prototype.toString.call (value);
+      if (type === '[object Object]') return 'object';
+      if (type === '[object Array]')  return 'array';
+      if (type === '[object RegExp]') return 'regex';
+      if (type === '[object Date]')   return 'date';
    }
 
    function e () {
@@ -40,10 +40,10 @@ Please refer to readme.md to read the annotated source.
    }
 
    function copy (input, seen) {
+      var typeInput = type (input);
+      if (typeInput !== 'object' && typeInput !== 'array') return input;
 
-      if (type (input) !== 'object' && type (input) !== 'array') return input;
-
-      var output = type (input) === 'array' ? [] : {};
+      var output = typeInput === 'array' ? [] : {};
 
       var Seen = [];
       if (seen !== undefined) {
@@ -52,7 +52,8 @@ Please refer to readme.md to read the annotated source.
 
       for (var i in input) {
          var circular = false;
-         if (type (input [i]) === 'object' || type (input [i]) === 'array') {
+         typeInput = type (input [i]);
+         if (typeInput === 'object' || typeInput === 'array') {
             for (var j in Seen) {
                if (Seen [j] === input [i]) {
                   circular = true;

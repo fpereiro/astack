@@ -878,7 +878,7 @@ Below is the annotated source.
 
 ```javascript
 /*
-aStack - v2.4.1
+aStack - v2.4.2
 
 Written by Federico Pereiro (fpereiro@gmail.com) and released into the public domain.
 
@@ -921,19 +921,19 @@ The purpose of `type` is to create an improved version of `typeof`. The improvem
 ```javascript
    function type (value) {
       var type = typeof value;
+      if (type !== 'object' && type !== 'number') return type;
       if (type === 'number') {
-         if      (isNaN (value))      type = 'nan';
-         else if (! isFinite (value)) type = 'infinity';
-         else if (value % 1 === 0)    type = 'integer';
-         else                         type = 'float';
+         if      (isNaN (value))      return 'nan';
+         else if (! isFinite (value)) return 'infinity';
+         else if (value % 1 === 0)    return 'integer';
+         else                         return 'float';
       }
-      if (type === 'object') {
-         if (value === null)                                               type = 'null';
-         if (Object.prototype.toString.call (value) === '[object Date]')   type = 'date';
-         if (Object.prototype.toString.call (value) === '[object Array]')  type = 'array';
-         if (Object.prototype.toString.call (value) === '[object RegExp]') type = 'regex';
-      }
-      return type;
+      if (value === null) return 'null';
+      type = Object.prototype.toString.call (value);
+      if (type === '[object Object]') return 'object';
+      if (type === '[object Array]')  return 'array';
+      if (type === '[object RegExp]') return 'regex';
+      if (type === '[object Date]')   return 'date';
    }
 ```
 
@@ -958,16 +958,22 @@ This function is recursive. On recursive calls, `input` won't represent the `inp
    function copy (input, seen) {
 ```
 
+We get the `type` of `input` and store it at `typeInput`.
+
+```javascript
+      var typeInput = type (input);
+```
+
 If `input` is not a complex object, we return it.
 
 ```javascript
-      if (type (input) !== 'object' && type (input) !== 'array') return input;
+      if (typeInput !== 'object' && typeInput !== 'array') return input;
 ```
 
 If we are here, `input` is a complex object. We initialize `output` to either an array or an object, depending on the type of `input`.
 
 ```javascript
-      var output = type (input) === 'array' ? [] : {};
+      var output = typeInput === 'array' ? [] : {};
 ```
 
 We create a new array `Seen`, to store all references to complex objects.
@@ -1014,10 +1020,16 @@ We initalize a local variable `circular` to `false`, to track whether the object
          var circular = false;
 ```
 
+We get the type of the element.
+
+```javascript
+         typeInput = type (input [i]);
+```
+
 If the element is a complex object:
 
 ```javascript
-         if (type (input [i]) === 'object' || type (input [i]) === 'array') {
+         if (typeInput === 'object' || typeInput === 'array') {
 ```
 
 We iterate `Seen`. If any of its values is equal to `input [i]`, we set `circular` to `true` and break the loop.

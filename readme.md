@@ -551,7 +551,7 @@ The `aStep` represents a single step in a sequence of asynchronous functions.
 
 The `aPath` is an array containing zero or more of the following:
 
-- `aFunctions~
+- `aFunctions`
 - `aSteps`
 - `aPaths`
 
@@ -781,6 +781,7 @@ What happens when you have an asynchronous sequence more than two steps long and
 
 The easiest way to cope with this is to set another variable in `s`.
 
+```javascript
 a.call ([
    [function (s) {
       s.value = 1;
@@ -798,6 +799,7 @@ a.call ([
       a.return (s, [value, s.last]);
    }
 ]);
+```
 
 In this case, we are setting `s.value` to `1`. If you have long or nested sequences, this scheme can get dirty quickly, because essentially it creates a dynamic variable - hence, there's no separate scope for nested calls. To use these variables without problems, try to:
 

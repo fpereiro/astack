@@ -2,7 +2,7 @@
 
 > "Callbacks are merely the continuation of control flow by other means." -- Carl von Clausewitz
 
-aStack is a Javascript tool for writing asynchronous functions almost as if they were synchronous.
+aStack is a tool for writing asynchronous functions almost as if they were synchronous, using plain javascript and no dependencies.
 
 aStack strives to be the simplest solution to the [async problem](https://github.com/fpereiro/astack#the-async-problem). I confronted this problem when writing a [Javascript toolset for devops](https://github.com/fpereiro/kaboot), where I needed to execute asynchronous functions in varying order. aStack emerged from that need.
 
@@ -21,45 +21,91 @@ And you also can use it in node.js. To install: `npm install astack`
 
 - [Usage examples](https://github.com/fpereiro/astack#usage-examples): see aStack in action.
 - [The async problem](https://github.com/fpereiro/astack#the-async-problem): why we are doing this.
-- [From callbacks to aStack](https://github.com/fpereiro/astack#from-callbacks-to-astack): count the differences.
-- [The elements of aStack](https://github.com/fpereiro/astack#the-elements-of-astack): the gist.
-- [Four more functions](https://github.com/fpereiro/astack#four-more-functions): conditional execution, parallel execution, and a couple more.
-- [Why so many square brackets?!](https://github.com/fpereiro/astack#why-so-many-square-brackets): it took me a while to figure this one out.
+- [Goodbye callbacks, hello aFunctions](https://github.com/fpereiro/astack#goodbye-callbacks-hello-afunctions): from callback hell to aStack.
+- [The elements of aStack](https://github.com/fpereiro/astack#the-elements-of-astack): `aFunction`, `aStep`, `aPath`, `aInput` and `aStack`.
+- [Core aFunctions](https://github.com/fpereiro/astack#core-afunctions): `a.call` and `a.return`.
+- [Five more aFunctions](https://github.com/fpereiro/astack#five-more-afunctions): conditional execution, parallel execution, and a couple more.
 - [Annotated source code](https://github.com/fpereiro/astack#source-code).
 
 ## Usage examples
 
 ### Sequential execution
 
-Write "0" to a file, then read that value, increment it by 1 three times. Everything is executed in order without using synchronous functions.
-
 ```javascript
-
+var a  = require ('astack');
 var fs = require ('fs');
-var a = require ('./astack.js');
 
-function writeFile (aStack, path, data) {
-   if (typeof (path) !== 'string') {
-      a.return (aStack, false);
-   }
-   else {
-      fs.writeFile (path, data, {encoding: 'utf8'}, function () {
-         console.log ('Current value of', path, 'is', data);
-         a.return (aStack, true);
-      });
-   }
+// Read the file at `path`
+// If the file cannot be read, the next async function will receive `undefined`
+// If the file can be read, the next async function will receive `data`
+
+var readFile = function (s, path) {
+   fs.readFile (path, function (error, data) {
+      if (error) {
+         console.log ('File', path, 'is empty');
+         a.return (s, undefined);
+      }
+      else {
+         console.log ('File', path, 'contains', data + '');
+         a.return (s, data + '');
+      }
+   });
 }
 
-function incrementFile (aStack, path) {
-   fs.readFile (path, function (error, data) {
-      writeFile (aStack, path, parseInt (data) + 1);
+// Write `data` to the file at `path`
+// Whether successful or not, when the operation is complete, pass `data` to the next async function.
+
+var writeFile = function (s, path, data, mute) {
+   fs.writeFile (path, data, {encoding: 'utf8'}, function (error) {
+      a.return (s, data);
    });
 }
 
 a.call ([
-   [writeFile, 'count.txt', '0'],
+   // Read the file for the first time.
+   [readFile,  'count.txt'],
+   // Write 0 to the file.
+   [writeFile, 'count.txt', 0],
+   // Read the file for the second time.
+   [readFile,  'count.txt'],
+   // Write 1 to the file.
+   [writeFile, 'count.txt', 1],
+   // Read the file for the third time.
+   [readFile,  'count.txt'],
+]);
+```
+
+This script prints the following:
+
+```
+File count.txt is empty
+File count.txt contains 0
+File count.txt contains 1
+```
+
+### Conditional execution
+
+```javascript
+// Read the file at `path` using `readFile`.
+// If the result of `readFile` was `undefined`, write 0 to the file at path.
+// Otherwise, parse the result of `readFile` into an integer, increment it, and write it to the file.
+
+var incrementFile = function (s, path, mute) {
+   a.cond (s, [readFile, path], {
+      undefined: [writeFile, path, 0],
+      default:   function (s) {
+         var data = parseInt (s.last);
+         writeFile (s, path, data + 1);
+      }
+   });
+}
+
+a.call (s, [
+   // Increment the file for the first time.
    [incrementFile, 'count.txt'],
+   // Increment the file for the second time.
    [incrementFile, 'count.txt'],
+   // Increment the file for the third time.
    [incrementFile, 'count.txt']
 ]);
 ```
@@ -67,75 +113,51 @@ a.call ([
 This script prints the following:
 
 ```
-Current value of count.txt is 0
-Current value of count.txt is 1
-Current value of count.txt is 2
-Current value of count.txt is 3
-```
-
-### Conditional execution
-
-Try writing '0' to the specified path. If the action was successful, increment that file, otherwise print an error message.
-
-```javascript
-function writeAndIncrement (aStack, path) {
-   a.cond (aStack, [writeFile, path, '0'], {
-      true: [incrementFile, path],
-      false: [function (aStack) {
-         console.log ('There was an error when writing to the file', path, 'so no incrementing will take place.');
-         a.return (aStack, false);
-      }]
-   });
-}
-
-a.call ([
-   [writeAndIncrement, 'count.txt'],
-   [writeAndIncrement],
-]);
-```
-
-This script prints the following:
-
-```
-Current value of count.txt is 0
-Current value of count.txt is 1
-There was an error when writing to the file true so no incrementing will take place.
+File count.txt is empty
+File count.txt contains 0
+File count.txt contains 1
 ```
 
 ### Parallel execution
 
-Try writing '0' and then incrementing, for three different files at the same time. When all actions are completed, print the results of each action.
-
 ```javascript
+// Invoke `incrementFile` twice in a row for each of three files.
+// After finishing the operation, pass an array of results to the next asynchronous function.
+
 a.call ([
-   [a.fork, [0, 1, 2], function (v) {
-      return [writeAndIncrement, 'count' + v + '.txt']
+   [a.fork, ['count0.txt', 'count1.txt', 'count2.txt'], function (v) {
+      return [
+         // Invoke `incrementFile` for the first time.
+         [incrementFile, v],
+         // Invoke `incrementFile` for the second time.
+         [incrementFile, v]
+      ];
    }],
-   [function (aStack) {
-      console.log ('a.fork operation ready. Result was', aStack.last);
-      a.return (aStack, true);
-   }]
+   function (s) {
+      console.log ('Parallel operation ready. Result was', s.last);
+      a.return (s, s.last);
+   }
 ]);
 ```
 
 This script prints the following:
 
 ```
-Current value of count0.txt is 0
-Current value of count1.txt is 0
-Current value of count2.txt is 0
-Current value of count1.txt is 1
-Current value of count0.txt is 1
-Current value of count2.txt is 1
-a.fork operation ready. Result was [ true, true, true ]
+File count0.txt is empty
+File count1.txt is empty
+File count2.txt is empty
+File count0.txt contains 0
+File count1.txt contains 0
+File count2.txt contains 0
+Parallel operation ready. Result was [ 1, 1, 1 ]
 ```
 
-Notice that the order of lines 4 to 6 may vary, depending on the actual order on which the files were written.
+Notice that the order of lines 1 to 6 may vary, depending on the actual order on which the files were written.
 
 Run concurrently an expensive operation, without doing more than `n` operations simultaneously.
 
 ```javascript
-function memoryIntensiveOperation (aStack, datum) {
+var memoryIntensiveOperation = function (s, datum) {
    ...
 }
 
@@ -146,7 +168,7 @@ a.fork (bigData, function (v) {
 }, {max: n});
 ```
 
-Run concurrently an expensive operation, spawning operations unless the process' memory usage exceeds a `threshold`.
+Run concurrently a memory expensive operation, spawning concurrent operations unless the process' memory usage exceeds a `threshold`.
 
 ```javascript
 a.fork (bigData, function (v) {
@@ -183,17 +205,17 @@ Synchronous functions do not need callbacks. This is because when their are invo
 Let's see an example:
 
 ```javascript
-function sync1 (data) {
+var sync1 = function (data) {
    // Do some stuff to data
    return data;
 }
 
-function sync2 (data) {
+var sync2 = function (data) {
    // Do some other stuff to data
    return data;
 }
 
-function syncSequence (data) {
+var syncSequence = function (data) {
    return sync2 (sync1 (data));
 }
 ```
@@ -207,17 +229,17 @@ When you execute `syncSequence`, the thread of execution does the following:
 If you wrote this example in an asynchronous way, this is how it would look like:
 
 ```javascript
-function async1 (data, callback) {
+var async1 = function (data, callback) {
    // Do some stuff to data
    callback (data);
 }
 
-function async2 (data, callback) {
+var async2 = function (data, callback) {
    // Do some stuff to data
    callback (data);
 }
 
-function asyncSequence (data, callback) {
+var asyncSequence = function (data, callback) {
    async1 (data, function (data) {
       async2 (data, function (data) {
          callback (data);
@@ -235,7 +257,7 @@ When you execute `asyncSequence`, this is what happens:
 Imagine that asyncSequence had to invoke three functions instead of two. It would look like this:
 
 ```javascript
-function asyncSequence (data, callback) {
+var asyncSequence = function (data, callback) {
    async1 (data, function (data) {
       async2 (data, function (data) {
          async3 (data, function (data) {
@@ -249,7 +271,7 @@ function asyncSequence (data, callback) {
 The above pattern of nested anonymous functions invoking asynchronous functions is affectionately known as **callback hell**. Compare this with its synchronous counterpart:
 
 ```javascript
-function syncSequence (data) {
+var syncSequence = function (data) {
    return sync3 (sync2 (sync1 (data)));
 }
 ```
@@ -259,19 +281,19 @@ The difference in clarity and succintness reflects the cost of asynchronous prog
 The standard way to avoid callback hell is to hardwire the callbacks into the asynchronous functions. For example, if `async2` always calls `async1` and `async3` always calls `async2`, then you can rewrite the example above as:
 
 ```javascript
-function async1 (data, callback) {
+var async1 = function (data, callback) {
    callback (data);
 }
 
-function async2 (data, callback) {
+var async2 = function (data, callback) {
    async1 (data, callback);
 }
 
-function async3 (data, callback) {
+var async3 = function (data, callback) {
    async2 (data, callback)
 }
 
-function asyncSequence (data, callback) {
+var asyncSequence = function (data, callback) {
    async3 (data, callback);
 }
 ```
@@ -282,7 +304,7 @@ Let's remember that synchronous functions don't have this problem, because they 
 
 This is the async problem: how to execute arbitrary sequences of asynchronous functions, without falling into callback hell. Or in other words, the problem is how to write sequences of asynchronous functions with an ease comparable to that of writing sequences of synchronous functions.
 
-## From callbacks to aStack
+## Goodbye callbacks, hello aFunctions
 
 Faced with the async problem, how can we make asynchronous functions behave more like synchronous functions, without callback hell and without loss of generality?
 
@@ -292,14 +314,14 @@ Let's see how we can transform callback hell into aStack <del>hell</del>.
 
 ```javascript
 
-function async1 (data, callback) {
+var async1 = function (data, callback) {
    // Do stuff to data here...
    callback (data);
 }
 
-// async2 and async3 are just like async1
+// `async2` and `async3` are just like `async1`
 
-function asyncSequence (data, callback) {
+var asyncSequence = function (data, callback) {
    async1 (data, function (data) {
       async2 (data, function (data) {
          async3 (data, function (data) {
@@ -315,60 +337,249 @@ function asyncSequence (data, callback) {
 ```javascript
 var a = require ('astack');
 
-function async1 (aStack, data) {
-   // Do stuff to data
-   a.return (aStack, data);
+var async1 = function (s, data) {
+   // If data is received as an argument, leave it as is. Otherwise, set data to `s.last`.
+   data = data || s.last;
+   // Do stuff to data here...
+   a.return (s, data);
 }
 
 // async2 and async3 are just like async1
 
-function asyncSequence (aStack, data, callback) {
-   a.call (aStack, [
-      [async1, data],
-      [async2],
-      [async3],
-      [callback]
-   ]);
+var asyncSequence = function (s, data, callback) {
+   a.call (s, [[async1, data], async2, async3, callback]);
 }
 ```
 
 Let's count the differences between both examples:
 
-1. In the first example, every async function takes a `callback` as its last argument. In the second one, every async function takes an `aStack` as its first argument.
-2. In the first example, `async1` finish their execution by invoking the `callback`. In the second one, they invoke a function named `a.return`, and pass to it both the `aStack` and the `return`ed value.
-3. In the first example, we have nested anonymous functions passing callbacks. In the second one, `asyncSequence` invokes a function named `a.call`, which receives as argument the `aStack` and an array with asynchronous functions and their arguments.
-4. In the second example, every combination of function + arguments is wrapped in an array, even when the function has no arguments.
+1. In the first example, every async function takes a `callback` as its last argument. In the second one, every async function takes `s` (an `aStack`) as its first argument.
+2. In the first example, `data` is passed directly to all functions. In the second one, `async2` and `async3` retrieve the data from `s.last`.
+3. In the first example, `async1` finish their execution by invoking the `callback`. In the second one, they invoke a function named `a.return`, and pass to it both the `aStack` and the `a.returned` value.
+4. In the first example, we have nested anonymous functions passing callbacks. In the second one, `asyncSequence` invokes a function named `a.call`, which receives as argument the `aStack` and an array with asynchronous functions and their arguments.
+5. In the second example, every combination of function + arguments is wrapped in an array, even when the function has no arguments.
 
-These three differences (`aStack`, `a.return`, `a.call` and wrapping function+arguments in an array) allow you to write asynchronous functions almost as if they were synchronous. In the next section we will explore how.
+Let's see these differences in detail:
+
+**Difference #1: instead of passing the callback as the last function, pass `s` (the `aStack`) as the first one**
+
+Before:
+
+```javascript
+var async1 = function (data, callback)
+```
+
+After:
+
+```javascript
+var async1 = function (s, data) {
+```
+
+**Difference #2: instead of receiving the result from the previous function explicitly, receive it from `s.last`**.
+
+```javascript
+var async1 = function (s, data);
+   // Do stuff to `data` here...
+```
+
+After:
+
+```javascript
+var async1 = function (s, data) {
+   data = data || s.last;
+   // Do stuff to `data` here...
+```
+
+**Difference #3: instead of passing the result of the function to the callback, invoke `a.return` and pass it both `s` and the result as its arguments**
+
+Before:
+
+```javascript
+   callback (data);
+```
+
+After:
+
+```javascript
+   a.return (s, data);
+```
+
+**Difference #4: instead of callback hell, invoke a.call with an array of functions to be executed**
+
+Before:
+
+```javascript
+var asyncSequence = function (data, callback) {
+   async1 (data, function (data) {
+      async2 (data, function (data) {
+         async3 (data, function (data) {
+            callback (data);
+         });
+      });
+   });
+}
+```
+
+After:
+
+```javascript
+var asyncSequence = function (s, data, callback) {
+   a.call (s, [[async1, data], async2, async3, callback]);
+}
+```
+
+Notice that `a.call` receives `s` as its first argument, and an array with functions as its second argument.
+
+But what about `[async1, data]`?
+
+**Rule #5: if one of the asynchronous functions receives explicit arguments, wrap the function and the arguments in an array.**
+
+```javascript
+      // `async1` receives `data` as an argument
+      [async1, data]
+```
 
 ## The elements of aStack
 
-The core of aStack is made of four structures and two functions. If you understand them, you can use the library with full confidence.
+aStack is built upon five structures:
 
-### The four structures of aStack
+1) `aFunction`
 
-aStack is composed of four structures.
+2) `aStep`
 
-1. `aStep`
-2. `aPath`
-3. `aStack`
-4. `aFunction`
+3) `aPath`
 
-#### `aStep`
+4) `aInput`
 
-The `aStep` is a callback (that is, a function), wrapped in an array, and followed by zero or more arguments.
+5) `aStack`
 
-`aStep = [mysqlQuery, 'localhost', 'SELECT * FROM records']`
+### aFunction
+
+An `aFunction` is a normal function (usually asynchronous, but not necessarily) that adheres to the following conventions:
+
+1) Receives an `aStack` as its first argument. Henceforth, when writing code, I'll employ the convention of referring to the `aStack` as `s`.
+
+   ```javascript
+   // Incorrect
+   var async = function (arg1, arg2) {
+      ...
+   }
+
+   // Correct
+   var async = function (s, arg1, arg2) {
+      ...
+   }
+   ```
+
+2) In any of its possible execution paths, the last thing that the function does is to invoke either `a.call`, `a.return` or any other `aFunction`, passing the `aStack` as the first argument to it.
+
+   ```javascript
+   // Incorrect
+   var async = function (s, arg1, arg2) {
+      if (arg1 === true) {
+         ...
+         // ERROR: this branch does not end with a call to an `aFunction`.
+      }
+      else {
+         ...
+         a.call (s, ...);
+      }
+   }
+
+   // Correct
+   var async = function (s, arg1, arg2) {
+      // Correct: both possible execution branches finish with a call to an `aFunction`.
+      if (arg1 === true) {
+         ...
+         a.call (s, ...);
+      }
+      else {
+         ...
+         a.call (s, ...);
+      }
+   }
+   ```
+
+3) In any execution path, there cannot be more than one call to `a.call` or another `aFunction` other than the last call.
+
+   ```javascript
+   // Incorrect
+   var async = function (s, arg1, arg2) {
+      a.call (s, ...);
+      ...
+      // ERROR: You already made a call to `a.call` above.
+      a.call (s, ...);
+   }
+
+   // Incorrect
+   var async2 = function (s) {
+      async1 (s, ...);
+      ...
+      // ERROR: You already invoked one aFunction above.
+      a.call (s, ...);
+   }
+   ```
+
+4) To read the value returned by the last asynchronous function, use `a.last`.
+
+   ```javascript
+   a.call ([
+      [a.return, 'somevalue'],
+      function (s) {
+         // This function will print 'somevalue'.
+         console.log (s.last);
+         a.return (s);
+      }
+   ])
+   ```
+In short:
+
+1. Mind the `aStack`.
+2. Call `a.call` or another `aFunction` as the last thing you do in every execution path.
+3. Call `a.call` or another `aFunction` only once per execution path.
+4. To retrieve the value of the previous `aFunction`, use `s.last`.
+
+### `aStep`
+
+An `aStep` is an `aFunction`, wrapped in an array, and followed by zero or more arguments.
+
+`var aStep = [mysqlQuery, 'localhost', 'SELECT * FROM records']`
 
 The `aStep` represents a single step in a sequence of asynchronous functions.
 
-#### `aPath`
+### `aPath`
 
-The `aPath` is an array containing zero or more `aStep`s. An `aPath` is, in fact, a sequence of asynchronous functions.
+The `aPath` is an array containing zero or more of the following:
 
-`aPath = [aStep, ...]`
+- `aFunctions~
+- `aSteps`
+- `aPaths`
 
-#### `aStack`
+All of these are valid `aPaths`:
+
+`[aStep, aFunction]`
+
+`[aStep, aPath, aStep]`
+
+`[]`
+
+`[[], [[aStep]]]`
+
+**Please note a very important point: an `aPath` cannot start with an aFunction, because it will be interpreted as an aStep!**.
+
+```javascript
+// Incorrect! `aStep` will be passed as an argument to `aFunction`
+[aFunction, aStep]
+
+// Correct
+[[aFunction], aStep]
+```
+
+### `aInput`
+
+An `aInput` is either an `aFunction`, an `aStep` or an `aPath`.
+
+### `aStack`
 
 The `aStack` is the argument that asynchronous functions will pass around instead of callbacks. It is an object that contains two keys:
 
@@ -378,7 +589,7 @@ The `aStack` is the argument that asynchronous functions will pass around instea
 A generic `aStack` looks like this:
 
 ```javascript
-aStack = {
+var aStack = {
    aPath: [aStep, aStep, ...],
    last: ...
 }
@@ -386,120 +597,48 @@ aStack = {
 
 `last` can have any value (even undefined).
 
-#### `aFunction`
-
-A detail I haven't mentioned yet: the first element of an `aStep` cannot be any function. Rather, it must be an `aFunction`.
-
-An `aFunction` is a normal function (usually asynchronous, but not necessarily) that adheres to the following conventions:
-
-- Receives an `aStack` as its first element.
-
-```javascript
-// Incorrect
-function async (arg1, arg2) {
-   ...
-}
-
-// Correct
-function async (aStack, arg1, arg2) {
-   ...
-}
-```
-
-- In any of its possible execution paths, the last thing that the function does is to invoke either `a.call` (a function we'll see below) or any other `aFunction`, passing the `aStack` as the first argument to it.
-
-```javascript
-function async (aStack, arg1, arg2) {
-   // Incorrect: one of the execution branches does not end with a call to an `aFunction`.
-   if (arg1 === true) {
-      ...
-   }
-   else {
-      ...
-      a.call (...);
-   }
-}
-
-function async (aStack, arg1, arg2) {
-   // Correct: both possible execution branches finish with a call to an `aFunction`.
-   if (arg1 === true) {
-      ...
-      a.call (...);
-   }
-   else {
-      ...
-      a.call (...);
-   }
-}
-```
-
-- In any execution path, there cannot be more than one call to `a.call` or another `aFunction` other than the last call. In any execution path, you must merge all calls to `a.call` into one.
-
-```javascript
-function async (aStack, arg1, arg2) {
-   a.call (...);
-   ...
-   // Incorrect! You already made a call to a.call above.
-   a.call (...);
-}
-
-function async2 (aStack) {
-   async1 (...);
-   ...
-   // Incorrect! You already invoked one aFunction above.
-   a.call (...);
-}
-```
-
-- Don't modify `aStack.aPath` and `aStack.last`. Rather, do it through `a.call` and `a.return` (which we'll see in a moment).
-
-In short:
-
-1. Mind the `aStack`.
-2. Call `a.call` or another `aFunction` as the last thing you do in every execution path.
-3. Call `a.call` or another `aFunction` only once per execution path.
-4. Don't modify `aStack.aPath` and `aStack.last` directly.
+## Core `aFunctions`
 
 ### `a.call`
 
 `a.call` is the main function of aStack and the soul of the library. Every `aFunction` calls either `a.call` directly, or through another `aFunction`. `a.call` keeps the ball rolling and ensures that all asynchronous functions are eventually executed.
 
 `a.call` takes one or two arguments:
-- An `aStack` (optional).
-- An `aPath` or `aStep`.
+- An optional `aStack`.
+- An `aInput` (`aFunction`, `aPath` or `aStep`).
 
-`a.call` receives two `aPath`s: the one in `aStack.aPath`, which we'll name *old aPath*, and the `aPath`/`aStep` it receives as its last argument, which we'll name *new aPath*.
+If no `aStack` is passed to `a.call`, a new one will be created automatically. This is useful when you do the initial invocation of an asynchronous sequence.
 
-`a.call` does two main things:
-- Takes the old and new `aPath`s and  prepends the new one to the old one to form a single `aPath`.
-- Executes the first function of this combined `aPath`, passing it the `aStack`.
-
-In essence, when you pass an `aStep`/`aPath`, you are putting that `aStep`/`aPath` **on top** of the previously existing stack of functions to execute, which is held in `aStack.aPath`.
-
-It is the stack-like nature of `a.call` that allows us to make nested asynchronous calls. When you encounter a call, you simply push it onto the stack and execute it first. The previously existing functions are still there, waiting for the call you just made. An execution thread is simply a pipeline where a single function is executed every time. By using a stack, we convert nested structures into a flattened sequence that executes things one after another.
-
-If no `aStack` is passed to `a.call`, a new one will be created. You may ask: **when is it useful to have an undefined `aStack`?** When you do the initial invocation to a asynchronous sequence, you have no previous asynchronous functions in the stack, so you start from zero.
-
-Notice that you can pass both an `aPath` and an `aStep` to `a.call`. If you pass an `aStep`, it will be transformed to an `aPath`.
+Notice that you can pass any `aInput` to `a.call`.
 
 ```javascript
-a.call ([[someFunction, 'arg1', 'arg2']]);
-```
+// Passing an `aFunction`
+a.call (someFunction);
 
-is equivalent to:
-
-```javascript
+// Passing an aStep
 a.call ([someFunction, 'arg1', 'arg2']);
+
+// Passing an `aPath` with two `aSteps`
+a.call ([
+   [someFunction, 'arg1', 'arg2'],
+   [someFunction, 'arg3', 'arg4']
+]);
+
+// Passing another `aPath` with two `aSteps`
+a.call ([
+   [someFunction],
+   someFunction
+]);
 ```
 
-The latter is more elegant and less error-prone.
+Note that, in the last example, although we wanted to invoke `someFunction` with no arguments, we have to wrap it in an array, otherwise `a.call` will think that the whole `aInput` (two consecutive invocations to `someFunction`) is actually a single invocation to `someFunction`, in which the second `someFunction` is actually an argument to the first.
 
-Also, instead of passing an `aPath`, you can pass an array that contains `aPath`s or `aStep`s, to arbitrary levels of nestedness. For example:
+Remember that `aPaths` can contain elements with arbitrary levels of nestedness. For example:
 
 ```javascript
 a.call ([
    [someFunction, 'arg1', 'arg2'],
-   [someOtherFunction, 'arg3']
+   [someFunction, 'arg3', 'arg4']
 ]);
 ```
 
@@ -508,118 +647,178 @@ is equivalent to:
 ```javascript
 a.call ([[
    [someFunction, 'arg1', 'arg2'],
-   [someOtherFunction, 'arg3']
+   [someFunction, 'arg3', 'arg4']
 ]]);
 ```
 
-and to
+and to:
 
 ```javascript
-a.call ([
-   [[someFunction, 'arg1', 'arg2']],
-   [[someOtherFunction, 'arg3']]
-]);
+a.call ([[
+   [],
+   [[[]], [someFunction, 'arg1', 'arg2'], []],
+   [someFunction, 'arg3', 'arg4']
+]]);
 ```
 
-`a.call` takes any array-like structure containing `aStep`s and flattens it to an `aPath`.
-
-If you passed an invalid `aPath`/`aStep`, `a.call` will `a.return` a `false` value. This means that the first function in `aStack.aPath` is invoked, receiving `false` as the value of the previous invocation.
-
-If the `aStack` is invalid, there's no valid `aFunction` to which to `a.return`, so `a.call` will directly `return` a `false` value.
-
-It is worthy to note the following pattern: if in an asynchronous function you find a validation error and you want to return `false`, you can both return and `a.return` that error: you `a.return` because you want the next function in the sequence to have that data, and you `return` so that you make the execution flow stop within the current function.
+If you passed an invalid `aInput` to `a.call`, `a.call` will pass `false` to the first asynchronous function in `aStack.aPath`. In addition, an error message will be printed.
 
 ```javascript
-function async (aStack, arg1) {
-   if (arg1 === false) {
-      return a.return (aStack, false);
+var async1 = function (s) {
+   a.call (s, /invalid/);
+}
+
+a.call ([
+   [async1],
+   function (s) {
+      console.log ('The last asynchronous function returned', s.last);
+      a.return (s, s.last);
    }
-}
-```
-
-If an `aStep` only has an `aFunction` and no other arguments, by default, `a.call` will pass `aStack.last` as the second argument to the function. Let's see an example of this:
-
-```javascript
-function async1 (aStack, data) {
-   a.return (aStack, data);
-}
-
-a.call ([
-   [async1, 'hey'],
-   [async1]
 ]);
+
+// This will print the following:
+
+// aStack error: aInput must be an array or function but instead is /invalid/ with type regex
+// The last asynchronous function returned false
+
 ```
 
-The first `aStep`, `[async1, 'hey']`, invokes `async1`, passing  `'hey'` as the second argument. `async1` then `a.return`s `'hey'`. The second `aStep` has no explicit arguments, so `a.call` will put `aStack.last` as its second argument. As a result, the second `aStep` behaves exactly like the first.
-
-Another example of this is in the `asyncSequence` example above. Let's repeat it here:
+If the `aStack` is invalid, there's no valid `aFunction` to which to `a.return`, so `a.call` will directly `return` a `false` value and print an error message.
 
 ```javascript
-function asyncSequence (aStack, data, callback) {
-   a.call (aStack, [
-      [async1, data],
-      [async2],
-      [async3],
-      [callback]
-   ]);
-}
+// This will print an error message, plus `false`.
+console.log (a.call (/invalid/));
 ```
-
-`async2` and `async3` receive whatever was `a.return`ed by `async1`, instead of receiving `undefined`.
-
-The reason for inserting `aStack.last` in `aStep`s without arguments is that **most `aStep`s without arguments are lambda functions written in place to do some operation based on `aStack.last`**.
-
-If you need `aStack.last` in a function that receives explicit parameters, please refer to the description of [stack parameters](https://github.com/fpereiro/astack#stack-parameters) below.
 
 ### `a.return`
 
 `a.return` takes two arguments:
 - An `aStack` (since it's an `aFunction`).
-- `last`, which is the value being `return`ed by the invoking function.
+- `last`, which is the value being `returned` by the invoking function.
+
+Notice that the `aStack` argument is not optional (as it is in `a.call`), since `a.return` needs to return *somewhere*, and that somewhere is stored in `aStack.last`.
 
 `a.return` does the following things:
 
-1. Validate the aStack.
-2. Set `aStack.last` to the `last` argument.
-3. Call `a.call` with the `aStack` and an empty `aPath`.
+1. Validate `s`.
+2. Set `s.last` to the `last` argument.
+3. Call `a.call` passing it `s` and an empty `aPath`.
 
-Notice that `a.return` is an `aFunction`, and as such, the last thing that it does is to invoke `a.call`. Calling `a.call` with an empty `aPath` effectively works as a return function, because it ends up executing the first function in `aStack.last`.
+Notice that `a.return` is an `aFunction`, and as such, the last thing that it does is to invoke `a.call`. Calling `a.call` with an empty `aPath` effectively works as a return function, because it ends up executing the first function in `s.aPath`.
 
-`a.return` can take an optional third argument, named `copy`, which should be a string. A copy of the return value will be stored in the aStack, under the key named as the `copy` argument. For example, if you write `a.return (aStack, true, 'someKey')`, the next `aFunction` executed will receive an `aStack` where `aStack.someKey === true`.
+### Some useful remarks
 
-`copy` is useful when you want to preserve an `a.return`ed value for more than one `aStep`. Since every `aStep` overwrites `aStack.last`, when you need to preserve states along a chain of `aStep`s, just use this argument. Caution must be taken not to overuse this resource, since it's comparable to setting a global variable within the `aStack` - and hence, you rely on other functions you call in the middle not to modify it and not to be disturbed by it in any way.
+#### Implicit stack passing to `aInput`
 
-Let's see this in an example:
+When invoking `a.call` with a previously existing `aStack`, notice that the `aStack` is passed as the first argument to the function, but it is nowhere referenced in the `aInput`.
+
+For example, in:
 
 ```javascript
-a.call ([
-   [function (aStack) {
-      a.return (aStack, 'Hey there!', 'message');
-   }],
-   [function (aStack) {
-      // Here, both aStack.last and aStack.message are equal to 'Hey there!'
-      a.return (aStack, true);
-   }],
-   [function (aStack) {
-      // Here, aStack.last will be equal to true, and aStack.message will still be equal to 'Hey there!'
-      ...
-   }]
-]);
+   a.call (s, [
+      [someFunction, 'arg1', 'arg2'],
+      [someFunction, 'arg1', 'arg2']
+   ]);
 ```
 
-### Stack parameters
+`s` will be automatically passed to both instances of `someFunction` as the first argument, and `arg1` and `arg2` will be the second and third arguments respectively. And by *automatically*, I mean through `a.call`.
+
+#### Recursive calls
+
+`aFunctions` can be recursive and they can call themselves, provided that they obey the general rules for `aFunctions` set above.
+
+As a matter of fact, even `a.call` can call itself recursively.
+
+```javascript
+   a.call (s, [a.call, [
+      [someFunction, 'arg1', 'arg2'],
+      [someFunction, 'arg1', 'arg2']
+   ]]);
+```
+
+#### `return a.return`
+
+It is worthy to note the following pattern: if an aFunction has many conditional branches, you can both `return` and `a.return` in the same line. This has a double effect:
+
+- Invoke `a.return`, keeping the asynchronous ball rolling.
+- Invoke `return`, stopping execution at the current `aFunction`.
+
+Take the following `aFunction`:
+
+```javascript
+var async = function (s) {
+   if (s.last === false) a.return (s, false);
+   else {
+      if (s.last > 100) {
+         // Do something here...
+         a.return (s, ...);
+      }
+      else {
+         // Do something else here...
+         a.return (s, ...);
+      }
+   }
+}
+```
+
+Using the `return a.return` pattern, you can rewrite it in a quite nicer form that avoids nested conditionals.
+
+```javascript
+var async = function (s) {
+   if (s.last === false) return a.return (s, false);
+   if (s.last > 100) {
+      // Do something here...
+      return a.return (s, ...);
+   }
+   // Do something else here...
+   a.return (s, ...);
+}
+```
+
+#### Beyond `s.last`
+
+What happens when you have an asynchronous sequence more than two steps long and you wish to use the value of (say) the results of the first and second asynchronous functions in the third one? In this situation, `s.last` won't do, because it can only hold a single value.
+
+The easiest way to cope with this is to set another variable in `s`.
+
+a.call ([
+   [function (s) {
+      s.value = 1;
+      a.return (s);
+   }],
+   function (s) {
+      a.return (s, 2);
+   },
+   function (s) {
+      // This will print 's.value is 1 and s.last is 2'
+      console.log ('s.value is', value, 'and s.last is', s.last);
+      var value = s.value;
+      // We delete `s.value` because we don't need it in subsequent calls
+      delete s.value;
+      a.return (s, [value, s.last]);
+   }
+]);
+
+In this case, we are setting `s.value` to `1`. If you have long or nested sequences, this scheme can get dirty quickly, because essentially it creates a dynamic variable - hence, there's no separate scope for nested calls. To use these variables without problems, try to:
+
+- Use unique names that you know are not used by other asynchronous functions in the same sequence.
+- Delete the variables as soon as you use them.
+
+One last important note: **please don't overwrite `s.aPath`**, since that's where `a.call` stores the state for a given asynchronous sequence!
+
+#### Stack parameters
 
 *Stack parameters* are a shorthand that allow you to reference return values in the `aStack` from within an `aStep`.
 
-Stack parameters allow you to refer statically (through a string) to a variable whose value you won't know until the required async functions are executed. If it wasn't for them, you'd have to either hardwire the logic into the async function (for example, make it read `aStack.last`) or wrap a generic function with a specific lambda function that passes `aStack.last` to the former.
+Stack parameters allow you to refer statically (through a string) to a variable whose value you won't know until the required async functions are executed. If it wasn't for them, you'd have to either hardwire the logic into the async function (for example, make it read `s.last`) or wrap a generic function with a specific lambda function that passes `s.last` to the former.
 
 Stack parameters can also refer to other objects in the `aStack`.
 
 ```javascript
 a.call ([
-   [function (aStack) {
-      aStack.data = 'b52';
-      a.return (aStack, true);
+   [function (s) {
+      s.data = 'b52';
+      a.return (s, true);
    }],
    [async1, '@data', '@last']
 ]);
@@ -631,8 +830,8 @@ Stack parameters support dot notation so that you can access elements in arrays 
 
 ```javascript
 a.call ([
-   [function (aStack) {
-      a.return (aStack, {data: 'b52', moreData: [1, 2, 3]});
+   [function (s) {
+      a.return (s, {data: 'b52', moreData: [1, 2, 3]});
    }],
    [async1, '@last.data', '@last.moreData.1']
 ]);
@@ -642,50 +841,81 @@ When `async1` is invoked, it will receive `'b52'` as its second argument and `2`
 
 Notice that you cannot use dots as part of the name of a stack parameter, because any dot will be interpreted as access to a subelement.
 
-If there's an exception generated by the dot notation (because you are trying to access a subelement of something that's neither an array nor an object, or a subelement with a stringified key from an array instead of an object), the stack parameter will be replaced by `undefined`.
+```javascript
+a.call (s, [
+   [function (s) {
+      // Incorrect! Keys with dots in their name won't be resolved correctly.
+      s ['key.with.dots'] = 'b52;
+      a.return (s, ...);
+   }],
+   [function (s) {
+      // data will be `undefined`
+      var data = s ['key.with.dots'];
+   }, '@key.with.dots']
+]);
+```
 
-## Four more functions
+If there's an exception generated by the dot notation (because you are trying to access a subelement of something that's neither an array nor an object, or a subelement with a stringified key from an array instead of an object), the stack parameter will be replaced by `undefined`. This is the reason for the example above yielding `data` equal to `undefined`, as opposed to throwing an exception.
+
+## Five more aFunctions
+
+Besides `a.call` and `a.return`, aStack provides five additional functions:
+
+- **`a.cond`**, for conditional execution.
+- **`a.fork`**, for parallel execution.
+- **`a.stop`**, for stopping a sequence when a certain value is `a.returned`.
+- **`a.log`**, for logging the `aStack` and additional parameters.
+- **`a.convert`**, for converting asynchronous functions that use callbacks into `aFunctions`.
 
 ### `a.cond`
 
 `a.cond` is a function that is useful for asynchronous *conditional* execution. You can see it in action in the [conditional execution example above](https://github.com/fpereiro/astack#conditional-execution).
 
-`a.cond` takes three arguments:
-- An `aStack` (optional). If you omit it, `a.cond` will create a new one.
-- An `aStep`/`aPath`.
+`a.cond` takes two or three arguments:
+- An optional `aStack`.
+- An `aCond` (which is an `aInput`).
 - An `aMap`.
 
-An `aMap` is an object where each key points to an `aStep`/`aPath`.
+As with `a.call`, if no `aStack` is passed, a new one will be created automatically. This is useful when you do the initial invocation of an asynchronous sequence.
 
-`a.cond` executes the `aStep`/`aPath`, obtains a result (we will call it `X`) and then executes the `aPath` contained at `aMap.X`.
+An `aMap` is an object where each key points to an `aInput`.
+
+`a.cond` executes the `aCond`, obtains a result (we will call it `X`) and then executes the `aPath` contained at `aMap.X`.
 
 Notice that `X` will be stringified, since object keys are always strings in javascript. For an example of this, refer to the conditional execution example above, where `true` and `false` are converted into `'true'` and `'false'`.
 
 You can also insert a `default` key in the `aMap`. This key will be executed if `X` is not found in the `aMap`.
 
-If neither `X` nor `default` are defined, `aCond` `a.return`s `false`.
+If neither `aMap.X` nor `aMap.default` are defined, an error message will be printed and `a.cond` will `a.return` `false`.
 
-### `fork`
+### `a.fork`
 
 `a.fork` is a function that is useful for asynchronous *parallel* execution. You can see it in action in the [parallel execution example above](https://github.com/fpereiro/astack#parallel-execution).
 
 `a.fork` takes one to four arguments:
-- An `aStack` (optional). If you omit it, `a.fork` will create a new one.
-- `data`, which can be an array, an object, an `aStep`/`aPath`, or an object where every key is an `aStep`/`aPath`.
-- `fun`, which is a function that outputs an `aStep`/`aPath` for each item in `data`.
-- `options`, the object with three keys:
+- An optional `aStack`.
+- `data`, which can be:
+   - An array.
+   - An object.
+   - An `aInput`.
+   - An object where every key maps to an `aInput`.
+- An optional `fun`, which is a function that outputs an `aInput` for each item in `data`.
+- An optional object `options`, which can have up to three keys:
    - `options.max`, an integer that determines the maximum number of concurrent operations.
    - `options.test`, a function that returns `true` or a falsy value, depending on whether `a.fork` can keep on firing concurrent operations.
    - `options.beat`, an integer that determines the amount of milliseconds to wait for new data after processing the existing one.
 
-If you pass an empty array or object as data, `a.fork` will just return an empty array or object.
+As with `a.call`, if no `aStack` is passed, a new one will be created automatically. This is useful when you do the initial invocation of an asynchronous sequence.
 
-The simplest way of using `a.fork` is passing it an `aPath` (you can also pass a single `aStep`, but having only one operation to execute renders concurrency useless).
+If you pass an empty array or object as `data`, `a.fork` will just `a.return` an empty array or object.
+
+Let's see now how to use `a.fork`. We will also explain in detail the relationship between `data`, `fun` and `options`.
+
+The simplest way of using `a.fork` is passing it an `aInput` (which can also be a single `aFunction` or `aStep`, although having only one operation to execute renders `a.fork` equivalent to invoking `a.call`).
 
 ```javascript
-
-function async1 (aStack, data) {
-   a.return (aStack, data);
+var async1 = function (s, data) {
+   a.return (s, data);
 }
 
 a.fork ([
@@ -695,15 +925,17 @@ a.fork ([
 ]);
 ```
 
-In this case, `a.fork` will return `['a', 'b', 'c']`, that is, one result per `aPath` passed.
+In this case, `a.fork` will return `['a', 'b', 'c']`, that is, an array with one result per `aInput` passed.
 
-Slightly more interesting is passing an object where each value is an `aStep`/`aPath`:
+`a.fork` takes care to wait for all `aSteps` to `a.return`, and to assign their results to the correct place in the array, no matter the order in which the `aSteps` finished their execution.
+
+Slightly more interesting is passing as `data` an object where each value is an `aInput`.
 
 ```javascript
 a.fork ({
-   first: [async1, 'a'],
+   first:  [async1, 'a'],
    second: [async1, 'b'],
-   third: [async1, 'c']
+   third:  [async1, 'c']
 });
 ```
 
@@ -711,7 +943,7 @@ In this case, `a.fork` will return `{first: 'a', second: 'b', third: 'c'}`, that
 
 Notice that `a.fork` returns an array/object where each element corresponds with the `aStep`/`aPath` it received, even if the concurrent operations returned *in an order different to which they were fired*.
 
-Most of the time, however, you don't want to pass an `aStep`/`aPath`. Rather, you want to pass a function that generates an `aStep`/`aPath` *from an array of data*. This function, called `fun`, receives each item from `data` and outputs an `aStep`/`aPath`.
+Most of the time, however, you don't want to pass an `aInput`. Rather, you want to pass a function that generates an `aInput` *from an array of data*. This function, called `fun`, receives each item from `data` and outputs an `aInput` per each of them.
 
 ```javascript
 a.fork (['a', 'b', 'c'], function (v) {
@@ -719,7 +951,7 @@ a.fork (['a', 'b', 'c'], function (v) {
 });
 ```
 
-In this case, `a.fork` will return the same output than in the first example: `['a', 'b', 'c']`.
+In this case, `a.fork` will yield the same output than in the first example: `['a', 'b', 'c']`.
 
 Now, let's go to the really interesting cases.
 
@@ -772,26 +1004,22 @@ In the above code, `a.fork` will receive data items as they are generated by `ev
 
 If neither `options.max` nor `options.test` are defined, `options.beat` is set to `0`. If either of these are defined, it is set to `100`. Naturally, you can override this value.
 
-When `a.fork` executes parallel `aPath`s, it will create copies of the `aStack` that are local to them. The idea behind this is to avoid side effects between parallel asynchronous calls. However, you should bear in mind two caveats:
+When `a.fork` executes parallel `aPaths`, it will create copies of the `aStack` that are local to them. The idea behind this is to avoid side effects between parallel asynchronous calls. However, you should bear in mind two caveats:
 
 - Some objects, however, like circular structures or HTTP connections cannot be copied (or at least not easily), so if any of the parallel threads changes these special objects, the change will be visible to other parallel threads.
 - If any of the parallel threads sets a key in its `aStack` that's neither `aPath` or `last`, that key will still be set after `a.fork` is done. If more than one parallel thread sets that key, the thread that sets it last (in real time, not by its order in the `aPath`) will overwrite the key set by the other thread.
 
 ```javascript
-function (aStack) {
+function (s) {
 
-   aStack.data = [];
+   s.data = [];
 
-   function inner (aStack) {
-      aStack.data.push (Math.random ());
-      a.return (aStack, true);
+   var inner = function (s) {
+      s.data.push (Math.random ());
+      a.return (s, true);
    }
 
-   a.fork (aStack, [
-      [inner],
-      [inner],
-      [inner]
-   ]);
+   a.fork (s, [[inner], inner, inner]);
 }
 ```
 
@@ -799,76 +1027,131 @@ After the call to `a.fork` above, the `aStack` will look something like:
 
 `{last: [true, true, true], data: [0.6843374725431204]}`
 
-Because the `aStack` is copied for each `aPath`, `aStack.data` will have just one element (the last one set) instead of three.
+Because the `aStack` is copied for each `aPath`, `s.data` will have just one element (the last value set) instead of three.
 
-### `stop`
+### `a.stop`
 
-Apart from the `aStack`, `a.stop` takes two more arguments: `stopValue` and an `aStep`/`aPath`.
+`a.stop` takes two or three arguments:
+- An optional `aStack`.
+- A `stopValue`.
+- An `aInput`.
 
-If the `aStack` is undefined, `stop` creates it.
+As with `a.call`, if no `aStack` is passed, a new one will be created automatically. This is useful when you do the initial invocation of an asynchronous sequence.
 
-The `stopValue` is any value, which is coerced onto a string. `a.stop` starts executing the first `aStep` in the `aPath`, and then, if the value `returned` by it is equal to the `stopValue`, that value is `a.return`ed and no further `aStep`s are executed. If it's not equal, then `a.stop` will execute the next `aStep`.
+The `stopValue` is any value, which is coerced onto a string. `a.stop` starts executing the first `aStep` in the `aInput`, and then, if the value `a.returned` by it is equal to the `stopValue`, that value is `a.returned` and no further `aSteps` are executed. If it's not equal, then `a.stop` will execute the next `aStep`.
 
-The `stopValue` cannot be equal to `'default'`.
+An important point: the `stopValue` cannot be equal to `'default'`.
 
-### `log`
+`a.stop` is particularly useful when you have a sequence of asynchronous actions where you want to stop as soon as you find an error. A canonical example of this is doing multiple chained requests to a database in order to serve an HTTP request:
+
+```javascript
+// `aFunction` for accessing the database
+var db = function (s, a, b, c) {
+   dbAPIFunction (a, b, c, function (error, data) {
+      if (error) s.error = error;
+      a.return (s, error ? false : data);
+   });
+}
+
+var serveRequest = function (request, response) {
+   a.cond ([a.stop, false, [
+      [db, ...],
+      function (s) {
+         // Do some processing of s.last here...
+
+         db (s, ...);
+      },
+      function (s) {
+         // Do some processing of s.last here...
+
+         db (s, ...);
+      },
+      function (s) {
+         // Do some processing of s.last here...
+
+         db (s, ...);
+      },
+   ]], {
+      false: function (s) {
+         response.end (s.error);
+      },
+      default: function (s) {
+         response.end (s.last);
+      }
+   });
+}
+```
+
+In `serveRequest`, we did four chained db requests. If any of these requests yield an error, execution will be stopped immediately and the error will be sent to the `response`. If every request is successful, the output of the last db request will be sent to the `response`.
+
+Notice how this pattern eliminates the boilerplate of checking for `error` after each db call.
+
+### `a.log`
 
 To inspect the contents of the `aStack`, place an `aStep` calling `a.log` just below the `aStep` you wish to inspect.
 
-`a.log` prints the contents of the aStack (but without printing the `aPath`), plus further arguments you pass to it. It then `returns` aStack.last, so execution resumes unaffected.
+`a.log` prints the contents of the aStack (but without printing the `aPath`), plus further arguments you pass to it. It then `returns` `s.last`, so execution resumes unaffected.
 
-## Why so many square brackets?!
+### `a.convert`
 
-You may be wondering: why do we need to wrap `aStep`s with no arguments (that is, mere functions) with square brackets? In other words, why can't we pass `aFunctions` without wrapping them in an array?
+If you start using aStack, very soon you'll find yourself writing wrappers around the core asynchronous functions you have to work with, because those functions use callbacks.
 
-If we didn't have to do this, the readability of `aStack` would certainly improve. To see this, we can go back to the example where I compare callback hell to aStack <del>hell</del>.
-
-Without requiring `aFunction`s to be wrapped in an array, the following function:
+For example, consider the following `aFunction`, which reads the files existing in a path.
 
 ```javascript
-function asyncSequence (aStack, data, callback) {
-   a.call (aStack, [
-      [async1, data],
-      [async2],
-      [async3],
-      [callback]
-   ]);
+var readdir = function (s, path) {
+   fs.readdir (path, function (error, files) {
+      if (error) {
+         console.log (error);
+         return a.return (s, false);
+      }
+      a.return (s, files);
+   });
 }
 ```
 
-Could be written like this:
+`readdir` is an `aFunction` that's a wrapper around `fs.readdir`. It invokes `fs.readdir`, passing `path` to it, plus a callback. The callback does the following:
+
+- In case of error it will a) print the error and b) `a.return` `false`.
+- In case of success, it will `a.return` `data`.
+
+`a.convert` is an utility function that receives a standard asynchronous function and returns an `aFunction`, designed to simplify the writing of wrappers around standard (callback-oriented) asynchronous functions.
+
+It takes one to three arguments:
+- `fun`, a function which is the asynchronous function at the core of our new `aFunction`.
+- `errfun`, an optional function that specifies what to print and what to `a.return` in case of error.
+- `This`, an optional value for specifying the correct value of `this` for `fun`.
+
+Using `a.convert`, we can rewrite `readdir` as follows:
 
 ```javascript
-function asyncSequence (aStack, data, callback) {
-   a.call (aStack, [[async1, data], async2, async3, callback]);
+var readdir = function (s, path) {
+   var read = a.convert (fs.readdir);
+   read (s, path);
 }
 ```
 
-To do this, we would be able to define an `aPath` as an array containing both `aPath`s and `aFunction`s.
+By default, if `fun` yields an error (which is passed as the first argument of its callback), the corresponding `aFunction` will log the error to the console, and `a.return` `false`.
 
-However, consider the following example:
+However, if you want to either change the logging (or disable it entirely), or `a.return` a different value in case of error, you can pass an `errfun` when constructing your `aFunction`:
 
 ```javascript
-[a.log,  [a.call, ...]]
-
-[a.call, [a.log,  ...]]
+var readdir = function (s, path) {
+   var read = a.convert (fs.readdir, function (error) {
+      console.log ('There was an error:', error);
+      return undefined;
+   });
+   read (s, path);
+}
 ```
 
-In our eyes, these two `aPath`s mean the following:
+Notice that the `errfun` passed as the second argument to `a.convert` prints a custom error, and then `returns` `undefined`. An important point: whatever is `returned` from the `errfun` will be `a.returned` in case there is an error.
 
-1) Execute `a.log`, then execute `a.call` passing `...` as its argument.
+`readdir` will now print a longer error message that starts with `There was an error:`, and `a.return` `undefined`, in case of finding an error.
 
-2) Execute `a.call`, passing it an `aPath` that contains `a.log` as first argument and `...` as its second argument.
+By default, the value of `this` with which `fun` is invoked is set to `fun` itself. In some cases, however, this will break the asynchronous functions you are wrapping. To fix this, you can pass a third argument which will be used as the value for `this`.
 
-Why do we interpret the first example to have two steps, whereas we interpret the second as having only one step? Structurally speaking, the examples are identical, except for us swapping `a.log` and `a.call`.
-
-The reason we consider them differently is that *we know that `a.call` takes `aStep`/`aPath`s as arguments*, and that `a.log` doesn't (or at least, not often).
-
-If we wanted to write `aFunction`s alongside `aStep`s (or even `aPath`s), we would need to understand when an `aStep` or `aPath` stands on itself, and when it is passed as an argument to the `aFunction` to its left.
-
-I cannot think of any elegant way of giving this information to aStack. Inspecting function signatures seems complicated and error-prone. And hardcoding a list of `aFunction`s that takes `aStep`/`aPath`s impedes you to write higher-order `aFunction`s (it's quite reasonable you'll want to write your own).
-
-To avoid this ambiguity (and clumsy workarounds or limitations) is that we need to wrap every `aStep` in an array.
+If you don't need to specify `errfun` but you need to specify `This`, set `errfun` to `undefined`, since `This` can only be passed as the third argument to `a.convert`.
 
 ## Source code
 
@@ -878,7 +1161,7 @@ Below is the annotated source.
 
 ```javascript
 /*
-aStack - v2.4.2
+aStack - v3.0.0
 
 Written by Federico Pereiro (fpereiro@gmail.com) and released into the public domain.
 
@@ -913,13 +1196,31 @@ The `type` function below is <del>copypasted</del> taken from [teishi](https://g
 
 The purpose of `type` is to create an improved version of `typeof`. The improvements are two:
 
-- Distinguish between `object`, `array`, `regex`, `date` and `null` (all of which return `object` in `typeof`).
 - Distinguish between types of numbers: `nan`, `infinity`, `integer` and `float` (all of which return `number` in `typeof`).
+- Distinguish between `array`, `date`, `null`, `regex` and `object` (all of which return `object` in `typeof`).
 
-`type` takes a single argument (of any type, naturally) and returns a string which can be any of: `nan`, `infinity`, `integer`, `float`, `array`, `object`, `function`, `string`, `regex`, `date`, `null` and `undefined`.
+For the other types that `typeof` recognizes successfully, `type` will return the same value as `typeof`.
+
+`type` takes a single argument (of any type, naturally) and returns a string with its type.
+
+The possible types of a value can be grouped into three:
+- *Values which `typeof` detects appropriately*: `boolean`, `string`, `undefined`, `function`.
+- *Values which `typeof` considers `number`*: `nan`, `infinity`, `integer`, `float`.
+- *values which `typeof` considers `object`*: `array`, `date`, `null`, `regex` and `object`.
+
+If you pass `true` as a second argument, `type` will distinguish between *true objects* (ie: object literals) and other objects. If you pass an object that belongs to a class, `type` will return the lowercased class name instead.
+
+The clearest example of this is the `arguments` object:
 
 ```javascript
-   function type (value) {
+type (arguments)        // returns 'object'
+type (arguments, true)  // returns 'arguments'
+```
+
+Below is the function.
+
+```javascript
+   var type = function (value, objectType) {
       var type = typeof value;
       if (type !== 'object' && type !== 'number') return type;
       if (type === 'number') {
@@ -928,23 +1229,11 @@ The purpose of `type` is to create an improved version of `typeof`. The improvem
          else if (value % 1 === 0)    return 'integer';
          else                         return 'float';
       }
-      if (value === null) return 'null';
-      type = Object.prototype.toString.call (value);
-      if (type === '[object Object]') return 'object';
-      if (type === '[object Array]')  return 'array';
-      if (type === '[object RegExp]') return 'regex';
-      if (type === '[object Date]')   return 'date';
-   }
-```
-
-We define a function `e` for performing two functions:
-- log its arguments to the console.
-- Return `false`.
-
-```javascript
-   function e () {
-      console.log (arguments);
-      return false;
+      type = Object.prototype.toString.call (value).replace ('[object ', '').replace (']', '').toLowerCase ();
+      if (type === 'array' || type === 'date' || type === 'null') return type;
+      if (type === 'regexp') return 'regex';
+      if (objectType) return type;
+      return 'object';
    }
 ```
 
@@ -955,7 +1244,7 @@ The "public" interface of the function (if we allow that distinction) takes a si
 This function is recursive. On recursive calls, `input` won't represent the `input` that the user passed to the function, but rather one of the elements that are contained within the original `input`.
 
 ```javascript
-   function copy (input, seen) {
+   var copy = function (input, seen) {
 ```
 
 We get the `type` of `input` and store it at `typeInput`.
@@ -1064,61 +1353,78 @@ We return `output` and close the function.
    }
 ```
 
+We define a function `e` for performing two functions:
+- log its arguments to the console.
+- Return `false`.
+
+```javascript
+   var e = function () {
+      console.log.apply (console, arguments);
+      return false;
+   }
+```
+
 ### Validation
 
-We define an object to hold the validation functions.
+We define an object `a.validate` to hold the validation functions.
 
 ```
    a.validate = {
 ```
 
-We will define `a.validate.aPath`, a function that will return `'aStep'` if the input is an `aStep`, `'aPath'` if the input is an `aPath`, and `false` otherwise.
-
-We unify the validation of `aPath`s and `aStep`s into a single function because they are very similar elements.
-
-Both `aPath`s and `aStep`s must be an array. If `input` is neither, we return false.
+We will now define `a.validate.aInput`. This function both validates an `aInput` and tells us which kind of `aInput` we are processing. This function will return `'aFunction'` if the input is an `aFunction`, `'aStep'` if the input is an `aStep`, `'aPath'` if the input is an `aPath`, and `false` otherwise.
 
 ```javascript
-      aPath: function (input) {
-         if (type (input) !== 'array') {
-            return (e ('aPath or aStep must be an array but instead is', input, 'with type', type (input)));
+      aInput: function (input) {
+```
+
+A valid `aInput` must be either of type `function` or `array`. If it is neither, we print an error and return false.
+
+```javascript
+         var typeInput = type (input);
+         if (typeInput !== 'array' && typeInput !== 'function') {
+            return (e ('aStack error: aInput must be an array or function but instead is', input, 'with type', typeInput));
          }
 ```
 
-If the first element of `input` is a function (presumably an `aFunction`), `input` is an `aStep`.
+If `input` is a function, we will consider it to be an `aFunction`. Short of parsing the source code, there's no way to guarantee that a function is an `aFunction`, so we leave to the user the burden of checking whether `aFunctions` are really valid `aFunctions`.
+
+```javascript
+         if (typeInput === 'function')        return 'aFunction';
+```
+
+If we're here, `input` is an array. If the first element of `input` is a function (presumably an `aFunction`), we will consider `input` to be an `aStep`.
 
 ```javascript
          if (type (input [0]) === 'function') return 'aStep';
 ```
 
-If `input` is an array and not an `aStep`, we will assume it is an `aPath`. Validation of its constituent elements will be deferred to recursive calls.
+If `input` is an array and not an `aStep`, we will assume it is an `aPath`. Validation of its constituent elements will be deferred to recursive calls to this function.
 
 ```javascript
                                               return 'aPath';
       },
 ```
 
-We will write a function for validating the `aStack`.
+We will now write a function for validating the `aStack`.
 
 ```javascript
-      aStack: function (aStack) {
+      aStack: function (s) {
 ```
 
 The `aStack` must be an object.
 
 ```javascript
-         if (type (aStack) !== 'object') {
-            return (e ('aStack must be an array but instead is', aStack, 'with type', type (aStack)));
-         }
+         if (type (s) !== 'object') return (e ('aStack error: aStack must be an object but instead is', s, 'with type', type (s)));
 ```
 
-`aStack.aPath` must be an `aPath`.
+`aStack.aPath` must be an `aPath` (and not just any `aInput` - we'll see why below).
 
 ```javascript
-         if (a.validate.aPath (aStack.aPath) !== 'aPath') return false;
+         if (a.validate.aInput (s.aPath) === false) return false;
 ```
 
-We return `true` and close both the function and the `a.validate` module.
+If we're here, `aStack` is valid. We return `true` and close both the function and the `a.validate` module.
 
 ```javascript
          return true;
@@ -1129,19 +1435,24 @@ We return `true` and close both the function and the `a.validate` module.
 We will write here a function `a.create` for initializing an empty `aStack`.
 
 ```javascript
-   a.create = function (aStack) {
+   a.create = function () {
 ```
 
-We return an empty `aStack`, which is just an object with the key `aPath` set to an empty array.
+We return an empty `aStack`, which is just an object with the key `aPath` set to an empty array (which represents an `aPath` with zero elements).
 
 ```javascript
       return {aPath: []}
    }
 ```
 
-We will write a function `a.flatten` that takes an `aPath` or `aStep`, validates it, and returns a flattened `aPath` containing zero or more `aStep`s.
+We will write a function `a.flatten` that takes an `aInput` (`aFunction`, `aStep` or `aPath`), validates it, and returns a flattened `aPath` containing zero or more `aSteps`.
 
-THe purpose of this function is to transform arbitrarily nested `aPath`s into flattened ones (so that `aStack.aPath` can be a stack instead of a stack of stacks), and also convert a single `aStep` into an `aPath` containing it.
+The purpose of this function is twofold:
+
+- Validate `input` through `a.validate.aInput`.
+- Transform any `input` into a flattened `aPath` (or `false`, if `input` turns out to be invalid).
+
+This function will call itself recursively in case its input is an `aPath`.
 
 ```javascript
    a.flatten = function (input) {
@@ -1153,10 +1464,16 @@ We validate the `input` using `a.validate.aPath` and store the result in a local
       var type = a.validate.aPath (input);
 ```
 
-If `input` is invalid (because it's neither an `aStep` nor an `aPath`, we return `false`.
+If `input` is invalid we return `false`.
 
 ```javascript
       if (type === false)   return false;
+```
+
+If `input` is an `aFunction`, we wrap it in an array twice (once to make it into an `aStep`, and the second time to make it into an `aPath`) and return it.
+
+```javascript
+      if (type === 'aFunction') return [[input]];
 ```
 
 If `input` is an `aStep`, we wrap it in an array and return it - thus, returning an `aPath` with a single `aStep` inside it.
@@ -1165,14 +1482,14 @@ If `input` is an `aStep`, we wrap it in an array and return it - thus, returning
       if (type === 'aStep') return [input];
 ```
 
-If `input` is an `aPath`, we create an array named `aPath` where we'll store the `aStep`s from `input`.
+If `input` is an `aPath`, we create an array named `aPath` where we'll store the `aSteps` from `input`.
 
 ```javascript
       if (type === 'aPath') {
          var aPath = [];
 ```
 
-We iterate through the elements of `input`.
+We iterate through the elements of `input`, which presumably is an `aPath`.
 
 ```javascript
          for (var i in input) {
@@ -1184,13 +1501,13 @@ We invoke `a.flatten` recursively on each of the elements of the `aPath` and sto
             var result = a.flatten (input [i]);
 ```
 
-If the element is not a valid `aPath` or `aStep`, we return `false`, thus discarding `aPath`. If any part of `input` is invalid, we consider all of it to be invalid.
+If the recursive call returns `false`, it means that this particular element of the `aPath` is not a valid `aInput`. Hence, we return `false`, thus discarding `input`. If any part of `input` is invalid, we consider all of it to be invalid.
 
 ```javascript
             if (result === false) return false;
 ```
 
-Otherwise, we concatenate the result (which will be a flattened `aPath`) with `aPath`.
+If we're here, all elements of the `aPath` are valid. we concatenate the result (which will be a flattened `aPath`) with `aPath`.
 
 ```javascript
             else aPath = aPath.concat (result);
@@ -1207,108 +1524,133 @@ We return the flattened `aPath` and close the function.
 
 ### Sequential execution
 
-We will now define `a.call`, the main function of the library. This function will run a sequence of `aFunction`s.
+We will now define `a.call`, the main function of the library.
 
 ```javascript
    a.call = function () {
 ```
 
-`a.call` is a [variadic function](http://en.wikipedia.org/wiki/Variadic_function), because it can be invoked with or without an `aStack`. How do we determine this? If the first argument received by the function is an object, it can only be an `aStack`, since the second argument is an `aPath` or `aStep` (which is an array).
+`a.call` is a [variadic function](http://en.wikipedia.org/wiki/Variadic_function), because it can be invoked with or without an `aStack`.
 
-If the first argument is an object, we consider that argument to be the `aStack`. Otherwise, we consider the first argument to be the `aPath`.
+We will define a local variable `arg`, initializing to `0`, to count how many arguments we have already processed. This pattern allows for succint argument recognition code in variadic functions, as we'll see below.
 
 ```javascript
-      var hasStack = type (arguments [0]) === 'object';
-      var aStack   = hasStack ? arguments [0] : a.create ();
-      var aPath    = hasStack ? arguments [1] : arguments [0];
+      var arg = 0;
 ```
 
-`a.call` supports a private argument, `external`, which is a boolean flag that is passed as the last argument to `a.call`. We will see the purpose of this `external` below.
+If the first argument received by the function is an object, it can only be an `aStack`, since the second argument must be either an `aFunction` (which is a function) or an `aPath` or `aStep` (which is an array). In this case, we will assign `aStack` to `arguments [0]` and increment `arg`. Otherwise, we will initialize the `aStack`.
+
+```javascript
+      var s        = type (arguments [arg]) === 'object' ? arguments [arg++] : a.create ();
+```
+
+Notice that if there's an `aStack` present, `arg` will now be `1`, otherwise it will be `0`. Effectively, `arg` keeps track of which argument we have to "parse" next.
+
+We will set a local variable `aPath` to the next argument. Although this can be an `aFunction`, `aStep` or also invalid, we will call it `aPath`, since we will soon validate it and convert it to a flattened `aPath`.
+
+```javascript
+      var aPath    = arguments [arg++];
+```
+
+Notice that we increment `arg` unconditionally.
+
+`a.call` supports a private argument, `external`, which is a boolean flag that is passed as the last argument to `a.call`. We will see the purpose of `external` below.
 
 For now, we just need to know that if the last argument passed to `a.call` is `true`, `external` will be set to `false`, and it will be set to `true` otherwise.
 
 ```javascript
-      var external = arguments [arguments.length - 1] === true ? false : true;
+      var external = arguments [arg] === true ? false : true;
 ```
 
 We validate the `aStack`. If it's not valid, we `return` `false`. Notice that we cannot `a.return` because there's no valid `aFunction` to which to `a.return`.
 
 ```javascript
-      if (a.validate.aStack (aStack) === false) return false;
+      if (a.validate.aStack (s) === false) return false;
 ```
 
-The default case is that `external` will be `true`. If you're reading for the first time, assume that we will enter the block below.
+The default case is that `external` will be `true`. If you're reading this function for the first time, assume that we will enter the block below.
 
 ```javascript
       if (external) {
 ```
 
-We flatten `aPath` using `a.flatten`. If `aPath` was an `aStep` or an array containing multiple `aPath`s (or any combination of `aStep`s and `aPath`s), it will be converted to a simple `aPath` with zero or more `aStep`s.
-
+We invoke `a.flatten`, to transform our `aInput` it into a flattened `aPath`.
 
 ```javascript
          aPath = a.flatten (aPath);
 ```
 
-A further benefit of this action is that it will effectively create a local copy of the `aStep` or `aPath` passed to `a.call`. Since we'll use destructive modifications below, this copy avoids modifications to the original `aStep` or `aPath` passed to the function.
+This action has two benefits:
+
+- We don't need to clutter `a.call` (or other core `aFunctions`, as we shall see) with logic to detect and deal with the cases where `aPath` is an `aFunction` or `aStep` or a nested `aPath`.
+- We effectively create a local copy of `aPath`, since `a.flatten` does not modify its inputs and returns a brand new `aPath`. Since we'll use destructive modifications on the `aPath` below, this copying avoids modifications to the original `aPath` passed to the function.
 
 *** stylistical diggression ***
 
-Let's recall that `a.flatten` works recursively on its input. I hesitated long before deciding to do a "deep" operation in the `aPath`, since deep operations in recursive structures are tantamount to batching, something that is [ill-advised](http://en.wikipedia.org/wiki/Taiichi_Ohno). In other libraries, such as [teishi](https://github.com/fpereiro/teishi) or [lith](https://github.com/fpereiro/lith), whenever I deal with recursive structures (`aPath`s are recursive structures, because they can contain themselves), I make validation and generation operations to deal with the topmost level of the input, and leave the deeper structures to be validated and generated through recursive function calls.
+Let's recall that `a.flatten` works recursively on its input, processing all of it at once. I hesitated long before deciding to do a "deep" operation in the `aPath`, since deep operations in recursive structures are tantamount to batching, something that is [ill-advised](http://en.wikipedia.org/wiki/Taiichi_Ohno). In other libraries, such as [teishi](https://github.com/fpereiro/teishi) or [lith](https://github.com/fpereiro/lith), whenever I deal with recursive structures (`aPaths` are recursive structures, because they can contain themselves), I make validation and generation operations to deal with the topmost level of the input, and leave the deeper structures to be validated and generated through recursive function calls.
 
-In this case, however, I decided that the right thing is to take the `aPath`, and validate it and flatten it as soon as it is received. In teishi and lith, all validation and generation is done synchronously. Hence, I can make recursive calls and receive `return`ed results by these calls. In aStack, however, once `a.call` calls itself, since it is an `aFunction`, it is not possible to `return` - we can only simulate this through `a.call`ing the next function in the `aStack`.
+For aStack, however, I have decided that batching is the way to go. As soon as `a.call` (or other basic `aFunctions`) receives its input, it process it all at once, converts it to a normal form (a flattened `aPath`, which is an `aPath` where every step is an `aStep`), and then proceed. Why did I decide this?
 
-This is the price we have to pay for bootstrapping `return` for asynchronous functions.
+The core difference between aStack and other libraries like teishi and lith is that in aStack, recursive calls cannot be done synchronously. Hence, if `a.call` were to process its input on a shallow way, leaving nested structures for recursive calls, it would have to do this asynchronously. This has two consequences which are highly undesirable:
 
-Although we cannot avoid batching, we can avoid flattening an `aPath` more than once. Other functions in the library (`a.cond` and `a.stop`) need to flatten the `aStep`/`aPath` they receive. When they invoke `a.call` with an already flattened `aPath`, they will pass `true` as the last argument to `a.call`, and thus letting the latter know that it needs not to either flatten or validate the `aPath`. Here we can understand what `external` stands for: it means that the call to `a.call` was done from an external source that didn't take the trouble to flatten/validate the `aPath` it's passing to `a.call`.
+- If a part of the input is invalid, the user may have to wait a considerable amount of time to find out, because asynchronous functions may take a long time to be executed, and each part of the input won't be validated until it is its turn to be executed.
+- For every execution, aStack would have to walk `input`, find the first `aFunction` or `aStep`, remove it from `input`, and execute it. This requires keeping additional state. Furthermore, the implementation would be quite complex. This extra state and complexity stems from the fact that we need to manage "by hand" what otherwise would be done by recursive calls.
+
+For both reasons (decreased user experience, inefficiency/complexity of implementation) I have decided against a recursive approach to validation in aStack.
 
 *** end stylistical diggression ***
+
+Although we cannot avoid batching, we can avoid flattening an `aPath` more than once. Other functions in the library (`a.cond` and `a.stop`) need to flatten the `aInput` they receive, before invoking `a.call`. When they invoke `a.call` with an already flattened `aPath`, they will pass `true` as the last argument to `a.call`, and thus letting the latter know that it needs not to either flatten or validate the `aPath`. Here we can understand what `external` stands for: it means that the call to `a.call` was done from an external source that didn't take the trouble to flatten/validate the `aPath` it's passing to `a.call`.
 
 If the `aPath` is invalid, we both `return` and `a.return` `false`.
 
 In any case, we also close the conditional block relying on `external`.
 
 ```javascript
-         if (aPath === false) return a.return (aStack, false);
+         if (aPath === false) return a.return (s, false);
       }
 ```
+
 The `return a.return` pattern serves multiple purposes:
 - By placing `return`, we stop the execution flow in the current function.
 - By placing `a.return`, we jump to the next function in the `aStack`, hence we activate the "next" asynchronous function.
 - If the `aStack` is also `false`, the function will return a `false` value, so if an asynchronous sequence is impossible (because the aSync stack is invalid), the calling function will know this immediately, in a synchronous way.
 
-Recall that `aStack.aPath` is a flattened `aPath`. We know this because it's either an empty `aPath` (as created by `a.create`), or because it's the product of previous calls to `a.call` or other `aFunction`s (remember that one of the principles of `aFunction`s is not to modify `aStack.aPath` directly).
+Recall that `s.aPath` is a flattened `aPath`. We know this because it's either an empty `aPath` (as created by `a.create`), or because it's the product of previous calls to `a.call` or other `aFunctions` (remember that one of the principles of `aFunctions` is not to modify `s.aPath` directly).
 
-Now, we take `aStack.aPath`, which is a sequence of all functions that are already in the execution stack, and *prepend* to it the new `aPath` that we received as an argument. This is tantamount to putting the `aPath` at the top of the stack. Since both `aPath` and `aStack.aPath` are flattened, we know we're dealing with a simple stack (instead of a stack of stacks).
+Now, we take `s.aPath`, which is a sequence of all functions that are already in the execution stack, and *prepend* to it the new `aPath` that we received as an argument. This is tantamount to putting the `aPath` at the top of the stack. Since both `aPath` and `s.aPath` are flattened, we know we're dealing with a simple stack (instead of a stack of stacks).
 
-After this step, `aStack.aPath` will be the updated stack, containing all async functions to be executed in the correct order.
+After this step, `s.aPath` will be the updated stack, containing all async functions to be executed in the correct order.
 
-```javascript
-      aStack.aPath = aPath.concat (aStack.aPath);
-```
+`a.call` does three main things:
+- Flattens and validates the `aInput` into an `aPath` - we'll call this the `new aPath`.
+- Prepends the `new aPath` to `s.aPath`.
+- Executes the first function of this combined `aPath`, passing it the `aStack`.
 
-If the stack has no functions (because both `aPath` and `aStack.aPath` were empty), we `return` the value contained in `aStack.last`. Usually, normal `return` values from asynchronous functions are useless, because the synchronous execution flow didn't stick around to see the result of the async calls. However, given the choice of `return`ing `undefined` or returning the proper last value (which is `aStack.last`), we opt for the latter.
+In essence, when you pass an `aInput`, you are putting it **on top** of the previously existing stack of functions to execute, which is held in `s.aPath`.
 
-```javascript
-      if (aStack.aPath.length === 0) return aStack.last;
-```
-
-We **remove** the first element of `aStack.aPath`, which is an `aStep`. We store it in a local variable `aStep`.
+This stack-like nature of `a.call` allows for nested asynchronous calls and recursive `aFunctions` without any extra effort. When `a.call` encounters a new call, it is flattened, pushed onto the stack and then executed. The previously existing functions are still there, waiting for the call you just made. An execution thread is simply a pipeline where a single function is executed every time. By using a stack, we convert nested structures into a flattened sequence that executes things one after another.
 
 ```javascript
-      var aStep = aStack.aPath.shift ();
+      s.aPath = aPath.concat (s.aPath);
 ```
 
-We **remove** the first element of `aStep`, which is an `aFunction`. We store it in a local variable `aFunction`.
+Now, if the stack has no functions left to execute (because both `aPath` and `s.aPath` were empty), we `return` the value contained in `s.last`. Usually, normal `return` values from asynchronous functions are useless, because the synchronous execution flow didn't stick around to see the result of the async calls. However, given the choice of `return`ing `undefined` or returning the proper last value (which is `s.last`), we opt for the latter.
+
+```javascript
+      if (s.aPath.length === 0) return s.last;
+```
+
+We take out the first element of `s.aPath`, which is an `aStep`. We store it in a local variable `aStep`.
+
+```javascript
+      var aStep = s.aPath.shift ();
+```
+
+We take out the first element of `aStep`, which is an `aFunction`. We store it in a local variable `aFunction`.
 
 ```javascript
       var aFunction = aStep.shift ();
-```
-
-If the `aStep` has no arguments, we push `aStack.last` to it.
-
-```javascript
-      if (aStep.length === 0) aStep.push (aStack.last);
 ```
 
 We now deal with stack parameters, replacing their placeholders with the actual parameters.
@@ -1352,7 +1694,7 @@ We iterate the elements of `parameterName`, which can be one or more.
 If this is the first element of the loop, we set `aStep [Argument]` (the argument we're currently processing) to the corresponding value in the `aStack`.
 
 ```javascript
-                  if (item === '0') aStep [Argument] = aStack [parameterName [item]];
+                  if (item === '0') aStep [Argument] = s [parameterName [item]];
 ```
 
 If this is not the first element of the loop, this means that dot notation was used. Hence, we access the subelements of `aStep [Argument]`. By using `aStep [Argument]` as our placeholder, in each successive iteration we select the appropriate subelement and set it to `aStep [Argument]`, until it has the intended value.
@@ -1389,12 +1731,12 @@ We're done with stack parameters, so we close the conditional and the `aStep` lo
 We place the `aStack` as the first element of the `aStep`.
 
 ```javascript
-      aStep.unshift (aStack);
+      aStep.unshift (s);
 ```
 
 We invoke the `aFunction`, passing the `aStep` as the array of arguments that will be applied to it. Since this function is (or should be) an `aFunction`, when that function is done doing its asynchronous actions, it will invoke either `a.call` or another `aFunction` (which in turn will invoke `a.call`), so this process will be repeated until all asynchronous functions in the stack are executed.
 
-Notice we place a `return` clause, in case the `aFunction` returns early (because recursive invocations to `a.call` `return`ed `false` (invalid `aStack`) or one of them was invoked with an empty `aPath`. In most cases, this `return` clause will be useless.
+Notice we place a `return` clause, in case the `aFunction` returns early (because recursive invocations to `a.call` `returned` `false` (invalid `aStack`) or one of them was invoked with an empty `aPath`.
 
 ```javascript
       return aFunction.apply (aFunction, aStep);
@@ -1408,44 +1750,30 @@ There's nothing else to do, so we close the function.
 
 We will now define `a.return`.
 
-`a.return` takes three arguments, `aStack`, `last` and `copy`.
+`a.return` takes two arguments, `s` and `last`.
 
 ```javascript
-   a.return = function (aStack, last, copy) {
+   a.return = function (s, last) {
 ```
 
-We validate the `aStack`. If it's invalid, we `return` `false`. We use a synchronous `return` since there's no valid `aFunction` in the `aStack` to which to pass the `false` value.
+We validate that `s` is an object. If it is false, we use a synchronous `return` since there's no valid `aFunction` in the `s.aPath` to which to `a.return` the `false` value.
 
 ```javascript
-      if (a.validate.aStack (aStack) === false) return false;
+      if (type (s) !== 'object') return (e ('aStack error: aStack must be an object but instead is', s, 'with type', type (s)));
 ```
 
 We set the `last` key of the `aStack` to the second argument, `last`.
 
 ```javascript
-      aStack.last = last;
+      s.last = last;
 ```
 
-We validate the `copy` parameter, which can only be `undefined`, a string or an integer.
+We invoke `a.call`, passing the `aStack` and an empty `aPath`. Because of how `a.call` works, this will effectively invoke the next function within `s.aPath`, so that `last` is actually `a.returned` to the next function.
+
+Also notice that we pass `true` as the last argument to `a.call`, to tell that function not to bother flattening the empty array we're passing as `aPath` (since it's empty).
 
 ```javascript
-      if (copy !== undefined && type (copy) !== 'string' && type (copy) !== 'integer') {
-         return e ('copy parameter passed to a.return must be string, integer or undefined but instead is', copy, 'with type', type (copy));
-      }
-```
-
-If `copy` is defined, we store an extra copy of the `last` parameter in the `aStack`.
-
-```javascript
-      if (copy !== undefined) aStack [copy] = last;
-```
-
-We invoke `a.call`, passing the `aStack` and an empty `aPath`. Because of how `a.call` works, this will effectively invoke the next function within `aStack.aPath`, so that `last` is actually `return`ed to the next function.
-
-Also notice that we pass `true` as the last argument to `a.call`, to tell that function not to bother flattening the empty array we're passing as `aPath`.
-
-```javascript
-      return a.call (aStack, [], true);
+      return a.call (s, [], true);
    }
 ```
 
@@ -1457,35 +1785,37 @@ Also notice that we pass `true` as the last argument to `a.call`, to tell that f
    a.cond = function () {
 ```
 
+As with `a.call` above, we use a local variable `arg` to keep count of the "parsed" arguments.
+
 If the first argument to the function is an object, we consider that element to be the `aStack`. Otherwise, we create it.
 
 ```javascript
-      var hasStack = type (arguments [0]) === 'object';
-      var aStack   = hasStack ? arguments [0] : a.create ();
+      var arg = 0;
+      var s        = type (arguments [arg]) === 'object' ? arguments [arg++] : a.create ();
 ```
 
-We define `aCond`, which is the `aStep` or `aPath` that represents the asynchronous condition. Depending on whether an `aStack` was passed or not, it is either the first or the second argument.
+We define `aCond`, which is the `aInput` that represents the asynchronous condition. Depending on whether an `aStack` was passed or not, it is either the first or the second argument.
 
 ```javascript
-      var aCond    = hasStack ? arguments [1] : arguments [0];
+      var aCond    = arguments [arg++];
 ```
 
-We define `aMap`, which is an object containing one `aStep` or `aPath` per key. Depending on whether an `aStack` was passed or not, it is either the second or the third argument.
+We define `aMap`, which is an object containing one `aInput`. Depending on whether an `aStack` was passed or not, it is either the second or the third argument.
 
 ```javascript
-      var aMap     = hasStack ? arguments [2] : arguments [1];
+      var aMap     = arguments [arg++];
 ```
 
 Since `a.stop` below invokes `a.cond`, and we never want to flatten an `aPath` more than once, we set this flag to precisely avoid this, as we did on `a.call` above.
 
 ```javascript
-      var external = arguments [arguments.length - 1] === true ? false : true;
+      var external = arguments [arg] === true ? false : true;
 ```
 
 If `aMap` is not an object, we print an error and `a.return` `false`.
 
 ```javascript
-      if (type (aMap) !== 'object') return a.return (aStack, e ('aMap has to be an object but instead is', aMap, 'with type', type (aMap)));
+      if (type (aMap) !== 'object') return a.return (s, e ('aStack error: aMap has to be an object but instead is', aMap, 'with type', type (aMap)));
 ```
 
 As we did above in `a.call`, if the `aPath` (which in this case is named `aCond`) was not validated/flattened, we do so. If it is invalid, we `return` `false`, both synchronously and asynchronously.
@@ -1493,23 +1823,22 @@ As we did above in `a.call`, if the `aPath` (which in this case is named `aCond`
 ```javascript
       if (external) {
          aCond = a.flatten (aCond);
-         if (aCond === false) return a.return (aStack, false);
+         if (aCond === false) return a.return (s, false);
       }
 ```
 
-If we're here, we know that `aCond` is a flattened `aPath`. We now want to execute `aCond` asynchronously (by invoking `a.call`), and after it is done, to execute the appropriate conditional asynchronous branch.
+If we're here, we know that `aCond` is now a flattened `aPath`. We now want to execute `aCond` asynchronously (by invoking `a.call`), and after it is done, to execute the appropriate conditional asynchronous branch.
 
-The simplest way to do this is to push an `aStep` with a special `aFunction` into the `aCond`, which will be executed after the last asynchronous function of `aCond`.
+The simplest way to do this is to append an `aStep` to the `aCond`, containing a special `aFunction` which will be executed after the last asynchronous function of `aCond`.
 
 ```javascript
-      aCond.push ([function (aStack, last) {
+      aCond.push ([function (s) {
 ```
 
-If there's a key in `aMap` which is equivalent to `aStack.last` (the value `a.return`ed by the last `aFunction` of `aCond`), we invoke `a.call`, passing as `aPath` the corresponding branch of the `aMap`.
+If there's a key in `aMap` which is equivalent to `s.last` (the value `a.returned` by the last `aFunction` of `aCond`), we invoke `a.call`, passing as `aPath` the corresponding branch of the `aMap`.
 
 ```javascript
-         if (aMap [last])      return a.call (aStack, aMap [last]);
-
+         if (aMap [s.last]) return a.call (s, aMap [s.last]);
 ```
 
 Notice how `aMap` is not passed as an explicit parameter, but rather is bound to the function because it's defined within the scope of the current invocation of `a.cond`. Such are the joys of lexical scope.
@@ -1517,13 +1846,13 @@ Notice how `aMap` is not passed as an explicit parameter, but rather is bound to
 Now, if `aMap [last]` is not defined but `aMap.default` is, we pass that branch to `a.call`.
 
 ```javascript
-         if (aMap ['default'])        return a.call (aStack, aMap ['default']);
+         if (aMap.default)  return a.call (s, aMap.default);
 ```
 
-If neither a branch corresponding to `aStack.last` nor a `default` branch are defined in the `aMap`, we report an error message and `return` `false`.
+If neither a branch corresponding to `s.last` nor a `default` branch are defined in the `aMap`, we report an error message and `return` `false`.
 
 ```javascript
-         return a.return (aStack, e ('The last aFunction received', last, 'as last argument', 'but aMap [', last, '] is undefined and aMap.default is also undefined!', 'aMap is:', aMap));
+         return a.return (s, e ('aStack error: The last aFunction received', last, 'as last argument', 'but aMap [', last, '] is undefined and aMap.default is also undefined!', 'aMap is:', aMap));
 ```
 
 There's nothing else to do in this `aFunction`, so we close it. We also close its containing `aStep`.
@@ -1553,30 +1882,33 @@ In the unlikely case that you 1) don't pass an `aStack` to `a.fork` and 2) `data
 
 However, because of the variability of the rest of the arguments of this function, this is the only way I see to determine the presence or absence of an `aStack`.
 
-If the `aStack` is not present, we invoke it.
+If the `aStack` is not present, we create it.
 
 ```javascript
-      var hasStack   = type (arguments [0]) === 'object' && type (arguments [0].aPath) === 'array';
-      var aStack     = hasStack ? arguments [0] : a.create ();
+      var arg = 0;
+      var s       = type (arguments [arg]) === 'object' && type (arguments [arg].aPath) === 'array' ? arguments [arg++] : a.create ();
 ```
 
 - `data` is a mandatory argument that contains an array or object.
-- `fun` is an optional function. If it's not present, `data` will be considered as an `aStep`/`aPath` (if it's an array), or as an object where every key is an `aStep`/`aPath`. If `fun` *is* present, `data` will be fed to the `fun` - the output will be an `aStep` or `aPath` per each item in `data`.
+- `fun` is an optional function. If it's not present, `data` will be considered as an `aFunction` (if it's a function), as an `aStep`/`aPath` (if it's an array), or as an object where every key is an `aStep`/`aPath`. If `fun` *is* present, `data` will be fed to the `fun` - the output will be an `aStep` or `aPath` per each item in `data`.
 - `options` is an optional object. If it's not defined, we initialize it to an empty object.
 
 ```javascript
-      var data       = hasStack ? arguments [1] : arguments [0];
-      var fun        = type (arguments [hasStack ? 2 : 1]) === 'function' ? arguments [hasStack ? 2 : 1] : undefined;
-      var options    = arguments.length > (hasStack ? 2 : 1) && type (arguments [arguments.length - 1]) === 'object' ? arguments [arguments.length - 1] : {};
+      var data    = arguments [arg++];
+      var fun     = type (arguments [arg]) === 'function' ? arguments [arg++] : undefined;
+      var options = arguments.length > arg && type (arguments [arg]) === 'object' ? arguments [arg] : {};
 ```
 
-If `data` is neither an array or an object, we print an error and `a.return` false.
+If `data` is a function, we wrap it in an array. If it's not a function, an array or an object, we print an error and `a.return` false.
+
+The case where `data` is a single `aFunction` or `aStep` is only added for consistency, since the purpose of `a.fork` is performing *multiple* simultaneous operations.
 
 ```javascript
       var dataType = type (data);
+      if (dataType === 'function') data = [data], dataType = 'array';
 
-      if ((dataType !== 'array' && dataType !== 'object')) {
-         return a.return (aStack, e ('data must be an array/object.'));
+      if (dataType !== 'array' && dataType !== 'object') {
+         return a.return (s, e ('aStack error: data passed to a.fork must be a function, an array or an object but instead is', data, 'with type', dataType));
       }
 ```
 
@@ -1586,9 +1918,9 @@ We validate the `options` object, placing the following conditions:
 - `options.test`, if defined, must be a function.
 
 ```javascript
-      if (options.max && (type (options.max) !== 'integer' || options.max < 1))  return a.return (aStack, e ('If defined, options.max must be an integer greater than 0.'));
-      if (options.beat && (type (options.beat) !== 'integer' || options.beat < 1))  return a.return (aStack, e ('If defined, options.beat must be an integer greater than 0.'));
-      if (options.test && type (options.test) !== 'function') return a.return (aStack, e ('If defined, options.test must be a function.'));
+      if (options.max && (type (options.max)   !== 'integer' || options.max  < 1)) return a.return (s, e ('aStack error: if defined, options.max passed to a.fork must be an integer greater than 0 but instead is',  options.max, 'with type', type (options.max)));
+      if (options.beat && (type (options.beat) !== 'integer' || options.beat < 1)) return a.return (s, e ('aStack error: if defined, options.beat passed to a.fork must be an integer greater than 0 but instead is', options.beat, 'with type', type (options.beat)));
+      if (options.test && type (options.test)  !== 'function')                     return a.return (s, e ('aStack error: If defined, options.test passed to a.fork must be a function but instead is',                options.test, 'with type', type (options.test)));
 ```
 
 If `options.beat` is not set, we initialize it to `0` if `options.max` and `options.test` are both `undefined`. Otherwise, we initialize it to `100`.
@@ -1600,8 +1932,8 @@ If `options.beat` is not set, we initialize it to `0` if `options.max` and `opti
 In the special case where data is empty, we return an empty array/object (corresponding to `data`'s type). Notice that when `data` is an array, we only return immediately if `options.beat` is zero. If `options.beat` is not zero, `a.fork` will wait for new elements to be added to the array until `options.beat` is elapsed.
 
 ```javascript
-      if (dataType === 'array'  && data.length === 0 && options.beat === 0) return a.return (aStack, []);
-      if (dataType === 'object' && Object.keys (data).length === 0)         return a.return (aStack, {});
+      if (dataType === 'array'  && data.length === 0 && options.beat === 0) return a.return (s, []);
+      if (dataType === 'object' && Object.keys (data).length === 0)         return a.return (s, {});
 ```
 
 We determine a local variable `output` to be either an array or an object, depending on `aPathType`. Notice that when `data` is an array, `output` will be an empty array, whereas if `data` is an object, `output` will be now equal to `data`.
@@ -1639,7 +1971,7 @@ What this function does is respond two questions:
 - Can we afford to do it currently?
 
 ```javascript
-      function fire () {
+      var fire = function () {
          return counter < data.length && test && (! options.max || options.max > active);
       }
 ```
@@ -1654,32 +1986,26 @@ If `options.test` is defined, every `option.beat` milliseconds, we set `test` to
 
 ```javascript
       if (options.test) {
-         var testRefresh = function () {
+         testInterval = setInterval (function () {
             test = options.test ();
             if (fire ()) load ();
-         }
-```
-
-We set `testInterval` once.
-
-```javascript
-         testInterval = setInterval (testRefresh, options.beat);
+         }, options.beat);
       }
 ```
 
-Now we get to the interesting part: we need to make parallel asynchronous calls, without any kind of race conditions, and make `a.fork` return the results (`output`) only when the last parallel call has `a.return`ed.
+Now we get to the interesting part: we need to make parallel asynchronous calls, without any kind of race conditions, and make `a.fork` return the results (`output`) only when the last parallel call has `a.returned`.
 
 To this effect, we'll define a helper function within the scope of the current call to `a.fork`. This function, `collect`, will take two arguments: an `aStack` (because it's an `aFunction`) and a `key`.
 
 `collect` is the `aFunction` that will be called *after* each `aStep` run in parallel, and to which we'll task to *collect* the results of each parallel `aStep`.
 
 ```javascript
-      function collect (stack, key) {
+      var collect = function (stack, key) {
 ```
 
 Notice that the `aStack` passed to `collect` is named `stack`, so that `collect` can also refer to the original `aStack`.
 
-The first thing that this function does is to set `output [key]` to the value `return`ed by the last asynchronous function. This value will have been `return`ed by the `aStep` at position `key` of the `aPath`. Notice this will work for both an array and an object. It will also work if elements are appended to `data` after `a.fork` fired.
+The first thing that this function does is to set `output [key]` to the value `a.returned` by the last asynchronous function. This value will have been `a.returned` by the `aStep` at position `key` of the `aPath`. Notice this will work for both an array and an object. It will also work if elements are appended to `data` after `a.fork` fired.
 
 ```javascript
          output [key] = stack.last;
@@ -1687,17 +2013,17 @@ The first thing that this function does is to set `output [key]` to the value `r
 
 Notice that `output` is the array/object we created a few lines above. By defining `collect` within each call to `a.fork`, we allow each parallel execution thread to have a reference common to all of them, which allows all of them to behave as a unit.
 
-In case `data` is an `array`, `output [key]` will be undefined before setting it to `stack.last`. If it's an object, `output [key]` will contain the `aStep`/`aPath` being executed (or data that generates this `aStep`/`aPath` through `fun`). In this case, that value will be replaced by the `a.return`ed value of the corresponding `aStep`/`aPath`.
+In case `data` is an `array`, `output [key]` will be undefined before setting it to `stack.last`. If it's an object, `output [key]` will contain the `aStep`/`aPath` being executed (or data that generates this `aStep`/`aPath` through `fun`). In this case, that value will be replaced by the `a.returned` value of the corresponding `aStep`/`aPath`.
 
-If in the `stack` there are any keys that are neither `aPath` nor `last` (that is, other stack parameters), we place them in the original `aStack`, which is the `aStack` that `a.fork` received. If there's any overlap within stack parameters from different parallel `aStep`s, the last `aStep` to `a.return` will prevail. For example, if `aPath [4]` sets `aStack.data` and `aPath [2]` sets `aStack.data` too, if `aPath [2]` `a.return`s later than `aPath [4]`, it will overwrite the value of `aStack.data` set by `aPath [4]`.
+If in the `stack` there are any keys that are neither `aPath` nor `last` (that is, other stack parameters), we place them in the original `aStack`, which is the `aStack` that `a.fork` received. If there's any overlap within stack parameters from different parallel `aSteps`, the last `aStep` to `a.return` will prevail. For example, if `aPath [4]` sets `aStack.data` and `aPath [2]` sets `aStack.data` too, if `aPath [2]` `a.returns` later than `aPath [4]`, it will overwrite the value of `aStack.data` set by `aPath [4]`.
 
 ```javascript
          for (var key in stack) {
-            if (key !== 'aPath' && key !== 'last') aStack [key] = stack [key];
+            if (key !== 'aPath' && key !== 'last') s [key] = stack [key];
          }
 ```
 
-We decrement `active`, since if we're invoking `collect`, it's because one of the `aStep`s just `a.return`ed (and hence, it's not executing anymore).
+We decrement `active`, since if we're invoking `collect`, it's because one of the `aSteps` just `a.returned` (and hence, it's not executing anymore).
 
 ```javascript
          active--;
@@ -1705,7 +2031,7 @@ We decrement `active`, since if we're invoking `collect`, it's because one of th
 
 At this point, we invoke `fire` and if it returns `true`, we invoke `load`. Notice that so far we've invoked `load` in two places:
 - When we recalculate `options.test`.
-- When a function `a.return`s and `active` goes down, hence making room for another function in case `active` === `options.max`.
+- When a function `a.returns` and `active` goes down, hence making room for another function in case `active` === `options.max`.
 
 A simpler way of putting this is: the two points where so far we invoked `load` are both places where a resource has been freed.
 
@@ -1735,7 +2061,7 @@ If we are here, no more data arrived. We are ready to finish. We clear `testInte
 
 ```javascript
                if (testInterval) clearInterval (testInterval);
-               if (active === 0 && counter === data.length)      a.return (aStack, output);
+               if (active === 0 && counter === data.length) return a.return (s, output);
 ```
 
 We set `options.beat` as the interval for the `setTimeout`. We close the conditional and the `collect` function.
@@ -1748,14 +2074,14 @@ We set `options.beat` as the interval for the `setTimeout`. We close the conditi
 
 Notice that `collect` is an exceptional `aFunction`, in that not always finishes by making a call to another `aFunction` - it only does it when a certain condition is met. However, this condition will be met exactly once - when the last `aStep` finished its execution. `collect and `a.fork`, together, behave like a proper `aFunction`.
 
-We now create a copy of the `aStack` and store it in a local variable `stack`. We then reset its `aPath` to an empty array.
+We now create a copy of the `aStack` and store it in a local variable `s2`. We then reset its `aPath` to an empty array.
 
 ```javascript
-      var stack = copy (aStack);
-      stack.aPath = [];
+      var s2 = copy (s);
+      s2.aPath = [];
 ```
 
-The purpose of `stack` is to have a clean copy of the `aStack` that is not the `aStack` itself. The reason for this is extremely abstruse, but since you're reading this, we might as well explain it. Remember above when `collect` iterated through special keys (i.e.: neither `last` nor `aPath`) of its `aStack` and placed them into the original `aStack`? Well, any of these changes will be visible to parallel calls that are executed later. By making a copy of the original `aStack`, we preserve the original `aStack` as it was before any of the parallel calls starts executing.
+The purpose of `s2` is to have a clean copy of the `aStack` that is not the `aStack` itself. The reason for this is extremely abstruse, but since you're reading this, I might as well explain it. Remember above when `collect` iterated through special keys (i.e.: neither `last` nor `aPath`) of its `aStack` and placed them into the original `aStack`? Well, any of these changes will be visible to parallel calls that are executed later. By making a copy of the original `aStack`, we preserve the original `aStack` as it was before any of the parallel calls starts executing.
 
 We set a variable `loading` that will determine whether we are currently spawning concurrent calls or not. The variable is initalized to `false`, since we haven't issued any concurrent functions yet.
 
@@ -1766,7 +2092,7 @@ We set a variable `loading` that will determine whether we are currently spawnin
 We now define `load`, the function that will issue concurrent function calls. The whole function consists of a while loop which will be executed only if `fire` returns `true` (hence, we need to process more data AND we have have available resources to do so) and if `load` is not currently being executed.
 
 ```javascript
-      function load () {
+      var load = function () {
          while (fire () && loading === false) {
 ```
 
@@ -1800,16 +2126,18 @@ If `fun` is defined, we set `value` to the output of `fun`, passing `value` and 
             if (fun) value = fun (value, key) || [];
 ```
 
-We invoke `a.call` passing as its `aStack` a **copy** of `stack`. This copy will be unique to the particular parallel thread we are initializing.
+We invoke `a.call` passing as its `aStack` a **copy** of `s2`. This copy will be unique to the particular parallel thread we are initializing.
 
 ```javascript
-         a.call (copy (stack), [
+            a.call (copy (s2), [
 ```
 
 Using this newly created `aStack`, we invoke `a.call`, passing to it `value` (which will be the `aStep`/`aPath` corresponding to the current `data` element), followed by an `aStep` containing `collect` and `key`.
 
+Notice that we wrap `value` in an array, because if it is an `aFunction`, `[collect, key]` will be interpreted as an argument to it, instead of as a contiguous `aStep`.
+
 ```javascript
-               value,
+               [value],
                [collect, key]
             ]);
 ```
@@ -1834,9 +2162,9 @@ There's nothing else to do. We close the function.
    }
 ```
 
-### Two useful functions
+### Three useful functions
 
-`a.stop` is a function that will execute an `aPath` until one of its `aStep`s `return`s a value equal to `stopValue`.
+`a.stop` is a function that will execute an `aInput` until one of its `aSteps` `a.returns` a value equal to `stopValue`. Both this return value and `stopValue` will be coerced into strings.
 
 ```javascript
    a.stop = function () {
@@ -1844,16 +2172,16 @@ There's nothing else to do. We close the function.
 
 This function, like `a.call`, `a.cond` and `a.fork` above, is variadic, and can either receive an `aStack` or create it.
 
-The other arguments are `stopValue`, `aPath` (which can be also an `aStep` or an array containing `aPath`s) and `external`.
+The other arguments are `stopValue`, `aPath` (which can be any `aInput`) and `external`.
 
 Since `a.stop` calls itself recursively, we enable the `external` flag to avoid repeated flattening of its `aPath`.
 
 ```javascript
-      var hasStack  = type (arguments [0]) === 'object';
-      var aStack    = hasStack ? arguments [0] : a.create ();
-      var stopValue = hasStack ? arguments [1] : arguments [0];
-      var aPath     = hasStack ? arguments [2] : arguments [1];
-      var external  = arguments [arguments.length - 1] === true ? false : true;
+      var arg = 0;
+      var s         = type (arguments [arg]) === 'object' ? arguments [arg++] : a.create ();
+      var stopValue = arguments [arg++];
+      var aPath     = arguments [arg++];
+      var external  = arguments [arg] === true ? false : true;
 ```
 
 If the function wasn't invoked by itself, we flatten the `aPath` and `return` `false` if the `aPath` is invalid.
@@ -1861,23 +2189,25 @@ If the function wasn't invoked by itself, we flatten the `aPath` and `return` `f
 ```javascript
       if (external) {
          aPath = a.flatten (aPath);
-         if (aPath === false) return a.return (aStack, false);
+         if (aPath === false) return a.return (s, false);
       }
 ```
 
-If `aPath` has length 0, there's nothing else to do, so we just `return` `aStack.last`.
+If `aPath` has length 0, there's nothing else to do, so we just `return` and `a.return` `s.last`.
 
 ```javascript
-      if (aPath.length === 0) return a.return (aStack, aStack.last);
+      if (aPath.length === 0) return a.return (s, s.last);
 ```
 
-We remove the first `aStep` from the `aPath` and store it in a local variable `next`.
+We extract the first `aStep` from the `aPath` and store it in a local variable `next`.
 
 ```javascript
       var next = aPath.shift ();
 ```
 
 We create an `aMap`. Its `default` key will be an `aStep` that calls `a.stop`, with arguments `stopValue`, `aPath` and `true`. Remember that the `aPath` now has one less `aStep` than when it entered the function.
+
+Notice that we pass `true` as the last argument to the recursive call to `a.stop`, since `aPath` is already flattened.
 
 ```javascript
       var aMap = {default: [a.stop, stopValue, aPath, true]};
@@ -1889,46 +2219,108 @@ We set another branch in the `aMap`, corresponding to the `stopValue`. If this b
       aMap [stopValue] = [a.return, stopValue];
 ```
 
-We invoke `a.cond`, passing the `aStack`, `next` wrapped into an array (which makes it an `aPath`), `aMap`, and external set to `true`.
+By this point, what we're doing should be clear: `a.stop` is actually invoking `a.cond` every time. If the value returned by the next `aStep` is equal to the `stopValue`, the branch taken in the `aCond` will `a.return` the `stopValue` and interrupt the execution. Otherwise, `a.stop` will call itself with a shorter `aPath`.
+
+We invoke `a.cond`, passing the `aStack`, `next`, `aMap`, and external set to `true`. Notice that we wrap `next` in an array to make it into an `aPath`, since we're setting `external` to `true` in our call to `a.cond` (hence `a.cond` is expecting a flattened `aPath` as its input).
 
 ```javascript
-      return a.cond (aStack, [next], aMap, true);
+      return a.cond (s, [next], aMap, true);
    }
 ```
 
-`a.log` is a function for logging the data in the `aStack` at any given moment, plus other arguments that you pass to it. It does two things:
+`a.log` is a function for logging the data in `s` at any given moment, plus other arguments that you pass to it. It does two things:
 
-- Log its arguments, with the exception of `aStack.aPath`.
-- `return` the same value that was in `aStack.last`.
+- Log its arguments, with the exception of `s.aPath`.
+- `a.return` the same value that was in `s.last`.
 
 ```javascript
-   a.log = function (aStack) {
+   a.log = function (s) {
 ```
 
-We create a local variable `Arguments` where we'll store a copy of `arguments`. Notice that we place an empty object instead of `aStack` as its first element.
+We create a local variable `Arguments` where we'll store a copy of `arguments`. Notice that we place an empty object instead of `aStack` as its first argument.
+
+We copy the `aPath` into a local variable. We then delete it from the stack.
+
+The purpose of this is to preserve `s.aPath`, but to prevent it from actually being printed.
 
 ```javascript
-      var Arguments = [{}].concat (Array.prototype.slice.call (arguments, 1));
+      var aPath = s.aPath;
+      delete s.aPath;
 ```
 
-We copy every key of the `aStack` into the first element of `Arguments`, except for `aPath`.
+We apply console.log to the arguments received by `a.log`.
 
 ```javascript
-      for (var key in aStack) {
-         if (key !== 'aPath') Arguments [0] [key] = aStack [key];
+      console.log.apply (console, arguments);
+```
+
+We restore `s.aPath` and `return` `s.last`, effectively leaving untouched the chain of asynchronous execution.
+
+```javascript
+      s.aPath = aPath;
+      return a.return (s, s.last);
+   }
+```
+
+`a.convert` is a function for taking callback-oriented asynchronous functions and converting them into `aFunctions`.
+
+`a.convert` takes three arguments:
+
+- `fun`, the asynchronous function to be converted. This function is expected to receive a callback that receives two elements, `error` and `data`.
+- `errfun`, a function for providing alternate behavior in case of error.
+- `This`, an alternate value for binding the `this` value of `fun`.
+
+```javascript
+   a.convert = function (fun, errfun, This) {
+```
+
+We validate that `fun` is a function and that `errfun` is either `undefined` or a function.
+
+```javascript
+      if (type (fun) !== 'function')                            return e ('aStack error: fun passed to a.convert must be a function but instead is', fun, 'with type', type (fun));
+      if (errfun !== undefined && type (errfun) !== 'function') return e ('aStack error: errfun passed to a.convert must be a function but instead is', errfun, 'with type', type (errfun));
+```
+
+If we're here, the input is valid. We proceed to return an `aFunction`. This function, naturally, takes `s` as its first argument.
+
+```javascript
+      return function (s) {
+```
+
+We copy `arguments` into a local array `Arguments`. Notice that we don't copy the first element of `arguments`, which is the `aStack`.
+
+```javascript
+         var Arguments = [].slice.call (arguments, 1);
+```
+
+We push a callback into `Arguments`. This callback takes an `error` and `data`, as any normal callback.
+
+```javascript
+         Arguments.push (function (error, data) {
+```
+
+If `fun` yields an error, our default choice is to print the error and `a.return` `false`.
+
+If, however, `errfun` is defined, we will invoke `errfun` passing it the error and we will `a.return` whatever is `returned` by `errfun`.
+
+```javascript
+            if (error) return a.return (s, errfun ? errfun (error) : e (error));
+```
+
+If `fun` executed without errors, we will simply `a.return` `data`.
+
+```javascript
+                       return a.return (s, data);
+         });
+```
+
+Now we will execute `fun`, passing it `Arguments` as its `arguments`. Notice that if `This` is defined, we use it as the `this` value for invoking `fun`; otherwise, we will use `fun` itself.
+
+There's nothing else to do, so we close the function to be `returned` and also `a.convert`.
+
+```javascript
+         fun.apply (This || fun, Arguments);
       }
-```
-
-We log `Arguments`.
-
-```javascript
-      console.log (Arguments);
-```
-
-We `a.return` `aStack.last` using the `aStack`.
-
-```javascript
-      return a.return (aStack, aStack.last);
    }
 ```
 
